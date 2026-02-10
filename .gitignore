@@ -1,3 +1,9 @@
+## START OF MANUAL IGNORE ADDITIONS
+**/.gradle
+
+
+## END OF MANUAL IGNORE ADDITIONS
+
 # Gradle files
 .gradle/
 build/
