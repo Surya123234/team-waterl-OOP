@@ -87,5 +87,10 @@ dependencies {
 
     // Lifecycle
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+
+    // Navigation
+    implementation("androidx.navigation:navigation-compose:2.7.7")
+
     implementation("io.coil-kt:coil-compose:2.5.0")
 }
