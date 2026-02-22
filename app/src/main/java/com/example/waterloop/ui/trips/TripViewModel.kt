@@ -18,6 +18,9 @@ class TripViewModel : ViewModel() {
     private val _tripCreationMessage = MutableStateFlow<String?>(null)
     val tripCreationMessage: StateFlow<String?> = _tripCreationMessage
 
+    private val _selectedTrip = MutableStateFlow<Trip?>(null)
+    val selectedTrip: StateFlow<Trip?> = _selectedTrip
+
     fun loadTrips() {
         viewModelScope.launch {
             _trips.value = repository.getTrips()
@@ -36,7 +39,30 @@ class TripViewModel : ViewModel() {
         }
     }
 
+    fun deleteTrip(tripId: String?) {
+        if (tripId == null) return
+        viewModelScope.launch {
+            val success = repository.deleteTrip(tripId)
+            if (success) {
+                _tripCreationMessage.value = "Trip deleted successfully"
+                loadTrips()
+            } else {
+                _tripCreationMessage.value = "Failed to delete trip"
+            }
+        }
+    }
+
     fun messageShown() {
         _tripCreationMessage.value = null
+    }
+
+    fun setSelectedTrip(trip: Trip) {
+        _selectedTrip.value = trip
+    }
+
+    fun loadTripById(tripId: String) {
+        viewModelScope.launch {
+            _selectedTrip.value = repository.getTripById(tripId)
+        }
     }
 }

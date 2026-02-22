@@ -67,4 +67,18 @@ class TripRepository {
             .select()
             .decodeList()
     }
+
+    suspend fun getTripById(tripId: String): Trip? {
+        return try {
+            client.from("trips")
+                .select {
+                    filter {
+                        eq("id", tripId)
+                    }
+                }
+                .decodeSingleOrNull<Trip>()
+        } catch (e: Exception) {
+            null
+        }
+    }
 }
