@@ -189,13 +189,10 @@ class MainActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // --- Display Trips ---
                         LazyColumn { items(trips) { trip -> Text(text = trip.title) } }
 
-                        // --- Display Markers ---
                         LazyColumn { items(markers) { marker -> Text(text = marker.title) } }
 
-                        // --- Display Marker Photos ---
                         LazyColumn {
                             items(markerPhotos) { photo ->
                                 Column(modifier = Modifier.padding(vertical = 8.dp)) {

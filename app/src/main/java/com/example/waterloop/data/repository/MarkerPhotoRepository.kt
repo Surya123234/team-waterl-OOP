@@ -12,24 +12,21 @@ class MarkerPhotoRepository {
 
     // Upload photo to Supabase Storage and return public URL
     suspend fun uploadPhoto(markerId: String, fileName: String, fileBytes: ByteArray): String? {
-        val bucketName = "marker-photos" // must exactly match your bucket
+        val bucketName = "marker-photos"
         val path = "$markerId/$fileName"
         val bucket = storage.from(bucketName)
 
         println("Starting upload to bucket '$bucketName' at path '$path'")
 
         return try {
-            // Upload file (will throw exception if it fails)
             bucket.upload(path, fileBytes) {
                 upsert = true
             }
 
-            // If upload succeeds, get public URL
             val publicUrl = bucket.publicUrl(path)
             println("Upload succeeded! URL: $publicUrl")
             publicUrl
         } catch (e: Exception) {
-            // Catch any failure
             println("Upload failed: ${e.message}")
             e.printStackTrace()
             null
@@ -54,7 +51,7 @@ class MarkerPhotoRepository {
             .decodeList()
     }
 
-    // Update a photo (for example, changing URL)
+    // Update a photo
     suspend fun updateMarkerPhoto(markerPhoto: MarkerPhoto) {
         client.from("marker_photos")
             .update(markerPhoto) { filter { eq("id", markerPhoto.id!!) } }

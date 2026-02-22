@@ -12,7 +12,6 @@ class MarkerPhotoViewModel : ViewModel() {
 
     private val repository = MarkerPhotoRepository()
 
-    // StateFlow for marker photos
     private val _markerPhotos = MutableStateFlow<List<MarkerPhoto>>(emptyList())
     val markerPhotos: StateFlow<List<MarkerPhoto>> = _markerPhotos
 
