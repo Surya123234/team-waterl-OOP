@@ -21,24 +21,46 @@ class TripRepository {
             city = city
         )
 
-        // Insert trip
-        val insertedTrip = client.from("trips")
-            .insert(trip) {
-                select()
-            }
-            .decodeSingle<Trip>()
+        return try {
+            // Insert trip
+            val insertedTrip = client.from("trips")
+                .insert(trip) {
+                    select()
+                }
+                .decodeSingle<Trip>()
 
-        // Insert owner membership
-        val member = TripMember(
-            tripId = insertedTrip.id!!,
-            userId = userId,
-        )
+            val insertedId = insertedTrip.id ?: return null
 
-        client.from("trip_members")
-            .insert(member)
+            // Insert owner membership
+            val member = TripMember(
+                tripId = insertedId,
+                userId = userId,
+            )
 
-        return insertedTrip
+            client.from("trip_members")
+                .insert(member)
+
+            insertedTrip
+        } catch (e: Exception) {
+            // Log exception
+            null
+        }
     }
+
+    suspend fun deleteTrip(tripId: String): Boolean {
+        return try {
+            client.from("trips")
+                .delete {
+                    filter {
+                        eq("id", tripId)
+                    }
+                }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
 
     suspend fun getTrips(): List<Trip> {
         return client.from("trips")

@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
                         MainScreen(navController = navController)
                     }
                     composable("map") {
-                        MapScreen()
+                        MapScreen(navController = navController)
                     }
                     composable("single_trip/{tripId}") { backStackEntry ->
                         TripScreen(
@@ -81,6 +81,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Composable
 fun MainScreen(navController: NavController) {
     val viewModel: TripViewModel = viewModel()
     val snackbarHostState = remember { SnackbarHostState() }

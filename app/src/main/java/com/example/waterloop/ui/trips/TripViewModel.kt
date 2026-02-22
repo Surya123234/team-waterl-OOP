@@ -26,8 +26,13 @@ class TripViewModel : ViewModel() {
 
     fun createTrip(title: String, city: String?) {
         viewModelScope.launch {
-            repository.createTrip(title, city)
-            _tripCreationMessage.value = "Trip created successfully"
+            val newTrip = repository.createTrip(title, city)
+            if (newTrip != null) {
+                _tripCreationMessage.value = "Trip created successfully"
+                loadTrips()
+            } else {
+                _tripCreationMessage.value = "Failed to create trip"
+            }
         }
     }
 
