@@ -28,6 +28,7 @@ android {
         properties.load(project.rootProject.file("local.properties").inputStream())
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${properties.getProperty("SUPABASE_PUBLISHABLE_KEY")}\"")
         buildConfigField("String", "SUPABASE_URL", "\"${properties.getProperty("SUPABASE_URL")}\"")
+        buildConfigField("String", "GEOAPIFY_API_KEY", "\"${properties.getProperty("GEOAPIFY_API_KEY")}\"")
     }
 
     buildTypes {
@@ -74,6 +75,7 @@ dependencies {
     // Mapbox
     implementation("com.mapbox.maps:android-ndk27:11.18.2")
     implementation("com.mapbox.extension:maps-compose-ndk27:11.18.2")
+    implementation ("com.mapbox.mapboxsdk:mapbox-android-gestures:x.y.z")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
 
