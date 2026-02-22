@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.example.waterloop.ui.markers.MarkerPhotoViewModel
 import com.example.waterloop.ui.trips.TripViewModel
 import com.example.waterloop.ui.theme.WaterlOOPTheme
@@ -197,9 +198,17 @@ class MainActivity : ComponentActivity() {
                         // --- Display Marker Photos ---
                         LazyColumn {
                             items(markerPhotos) { photo ->
-                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+
                                     Text("Photo ID: ${photo.id}")
-                                    Text("URL: ${photo.photoUrl}")
+
+                                    AsyncImage(
+                                        model = photo.photoUrl,
+                                        contentDescription = "Marker Photo",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(200.dp)
+                                    )
                                 }
                             }
                         }

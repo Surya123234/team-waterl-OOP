@@ -84,4 +84,5 @@ dependencies {
 
     // Lifecycle
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
+    implementation("io.coil-kt:coil-compose:2.5.0")
 }
