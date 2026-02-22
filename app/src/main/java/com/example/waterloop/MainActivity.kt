@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.waterloop.ui.theme.WaterlOOPTheme
 import com.example.waterloop.ui.trips.TripViewModel
+import com.example.waterloop.ui.trips.MarkerViewModel
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -43,6 +44,8 @@ class MainActivity : ComponentActivity() {
                 val tripCreationMessage by viewModel.tripCreationMessage.collectAsState()
                 val interactionSource = remember { MutableInteractionSource() }
                 val isPressed by interactionSource.collectIsPressedAsState()
+                val markerViewModel = MarkerViewModel()
+                val markers by markerViewModel.markers.collectAsState()
 
                 LaunchedEffect(tripCreationMessage) {
                     tripCreationMessage?.let {
@@ -85,10 +88,64 @@ class MainActivity : ComponentActivity() {
                         ) {
                             Text("Load Your Trips")
                         }
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
 
+                                    markerViewModel.createMarker(
+                                        "74460e74-3ad3-4647-94d6-2590a2d7ca96"
+                                    )
+
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Create Marker")
+                        }
+
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    markerViewModel.loadMarkers(
+                                        "74460e74-3ad3-4647-94d6-2590a2d7ca96"
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Load Markers")
+                        }
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    markerViewModel.updateFirstMarker("Updated Marker")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Update First Marker")
+                        }
+
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    markerViewModel.deleteFirstMarker()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Delete First Marker")
+                        }
                         LazyColumn {
                             items(trips) { trip ->
                                 Text(text = trip.title)
+                            }
+                        }
+                        LazyColumn {
+                            items(markers) { marker ->
+                                Text(
+                                    text = marker.title
+                                )
                             }
                         }
                     }
