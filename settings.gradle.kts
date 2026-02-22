@@ -20,6 +20,9 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url = uri("maven.scijava.org/content/repositories/public/") }
+        maven {
+            url = uri("https://api.mapbox.com/downloads/v2/releases/maven")
+        }
     }
 }
 

@@ -71,6 +71,9 @@ dependencies {
     implementation("io.ktor:ktor-client-android:3.4.0")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
 
+    // Mapbox
+    implementation("com.mapbox.maps:android-ndk27:11.18.2")
+    implementation("com.mapbox.extension:maps-compose-ndk27:11.18.2")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
 
