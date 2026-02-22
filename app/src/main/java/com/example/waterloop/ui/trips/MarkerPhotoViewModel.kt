@@ -27,7 +27,7 @@ class MarkerPhotoViewModel : ViewModel() {
         viewModelScope.launch {
             val newPhoto = repository.createMarkerPhotoWithUpload(markerId, fileName, fileBytes)
             if (newPhoto != null) {
-                loadMarkerPhotos(markerId) // Refresh the list
+                loadMarkerPhotos(markerId)
             }
         }
     }

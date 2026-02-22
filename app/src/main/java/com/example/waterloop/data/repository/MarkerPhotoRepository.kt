@@ -10,7 +10,6 @@ class MarkerPhotoRepository {
     private val client = SupabaseClient.client.postgrest
     private val storage = SupabaseClient.client.storage
 
-    // Upload photo to Supabase Storage and return public URL
     suspend fun uploadPhoto(markerId: String, fileName: String, fileBytes: ByteArray): String? {
         val bucketName = "marker-photos"
         val path = "$markerId/$fileName"
@@ -33,7 +32,6 @@ class MarkerPhotoRepository {
         }
     }
 
-    // Create a new MarkerPhoto with upload
     suspend fun createMarkerPhotoWithUpload(markerId: String, fileName: String, fileBytes: ByteArray): MarkerPhoto? {
         val photoUrl = uploadPhoto(markerId, fileName, fileBytes) ?: return null
         println("Uploaded")
@@ -44,20 +42,17 @@ class MarkerPhotoRepository {
             .decodeSingle()
     }
 
-    // Get all photos for a specific marker
     suspend fun getMarkerPhotos(markerId: String): List<MarkerPhoto> {
         return client.from("marker_photos")
             .select { filter { eq("marker_id", markerId) } }
             .decodeList()
     }
 
-    // Update a photo
     suspend fun updateMarkerPhoto(markerPhoto: MarkerPhoto) {
         client.from("marker_photos")
             .update(markerPhoto) { filter { eq("id", markerPhoto.id!!) } }
     }
 
-    // Delete a photo by ID
     suspend fun deleteMarkerPhoto(photoId: String) {
         client.from("marker_photos")
             .delete { filter { eq("id", photoId) } }
