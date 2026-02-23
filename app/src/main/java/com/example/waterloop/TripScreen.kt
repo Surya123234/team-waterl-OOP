@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -118,6 +120,12 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
     var showAllMarkersSheet by remember {
         mutableStateOf(false)
     }
+    var showEditMarkerDialog by remember {
+        mutableStateOf(false)
+    }
+    var editMarkerText by remember {
+        mutableStateOf("")
+    }
     var longPressedPoint by remember {
         mutableStateOf<Point?>(null)
     }
@@ -183,7 +191,7 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
             SnackbarHost(snackbarHostState)
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)){
+        Box(modifier = Modifier.padding(paddingValues)) {
             RequestLocationPermission(
                 requestCount = permissionRequestCount,
                 onPermissionDenied = {
@@ -307,11 +315,14 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                                     longPressedPoint = null
                                 } else {
                                     // Button press - geocode the location
-                                    val encodedText = URLEncoder.encode(markerText, StandardCharsets.UTF_8.toString())
+                                    val encodedText = URLEncoder.encode(
+                                        markerText,
+                                        StandardCharsets.UTF_8.toString()
+                                    )
                                     val response = httpClient.get(
                                         "https://api.geoapify.com/v1/geocode/search?text=${encodedText}&format=json&apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
                                     ).body<GeocodeResponse>()
-                                    
+
                                     if (!response.results.isNullOrEmpty()) {
                                         val result = response.results[0]
                                         val newMarker = MapMarker(
@@ -365,10 +376,37 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                Text(
-                    text = selectedMarker?.text.orEmpty(),
-                    style = MaterialTheme.typography.titleLarge
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = selectedMarker?.text.orEmpty(),
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = {
+                        editMarkerText = selectedMarker?.text.orEmpty()
+                        showEditMarkerDialog = true
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit marker"
+                        )
+                    }
+                    IconButton(onClick = {
+                        selectedMarker?.let { marker ->
+                            markers.remove(marker)
+                            showMarkerSheet = false
+                            selectedMarker = null
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete marker"
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 Image(
                     painter = painterResource(id = R.drawable.google_dublin),
@@ -397,6 +435,47 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                 Spacer(modifier = Modifier.height(12.dp))
             }
         }
+    }
+
+    if (showEditMarkerDialog && selectedMarker != null) {
+        AlertDialog(
+            onDismissRequest = { showEditMarkerDialog = false },
+            title = { Text("Edit Marker") },
+            text = {
+                OutlinedTextField(
+                    value = editMarkerText,
+                    onValueChange = { editMarkerText = it },
+                    label = { Text("Marker Name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        selectedMarker?.let { oldMarker ->
+                            val index = markers.indexOf(oldMarker)
+                            if (index != -1) {
+                                markers[index] = MapMarker(
+                                    point = oldMarker.point,
+                                    text = editMarkerText
+                                )
+                                selectedMarker = markers[index]
+                            }
+                        }
+                        showEditMarkerDialog = false
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showEditMarkerDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showAllMarkersSheet) {
