@@ -1,28 +1,58 @@
 package com.example.waterloop
 
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import com.example.waterloop.ui.markers.MarkerPhotoViewModel
-import com.example.waterloop.ui.trips.TripViewModel
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.example.waterloop.ui.theme.WaterlOOPTheme
-import com.example.waterloop.ui.trips.MarkerViewModel
+import com.example.waterloop.data.model.Trip
+import com.example.waterloop.ui.trips.TripViewModel
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -30,181 +60,150 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            WaterlOOPTheme {
-                val viewModel = TripViewModel()
-                val markerViewModel = MarkerViewModel()
-                val markerPhotoViewModel = MarkerPhotoViewModel()
-                val coroutineScope = rememberCoroutineScope()
-                val snackbarHostState = remember { SnackbarHostState() }
-
-                val trips by viewModel.trips.collectAsState()
-                val tripCreationMessage by viewModel.tripCreationMessage.collectAsState()
-                val markers by markerViewModel.markers.collectAsState()
-                val markerPhotos by markerPhotoViewModel.markerPhotos.collectAsState()
-
-                val interactionSource = remember { MutableInteractionSource() }
-                val isPressed by interactionSource.collectIsPressedAsState()
-
-                LaunchedEffect(tripCreationMessage) {
-                    tripCreationMessage?.let {
-                        snackbarHostState.showSnackbar(it)
-                        viewModel.messageShown()
+            WaterlOOPTheme(darkTheme = true) {
+                val navController = rememberNavController()
+                NavHost(navController = navController, startDestination = "main") {
+                    composable("main") {
+                        MainScreen(navController = navController)
+                    }
+                    composable("map") {
+                        MapScreen(navController = navController)
+                    }
+                    composable("single_trip/{tripId}") { backStackEntry ->
+                        TripScreen(
+                            navController = navController,
+                            tripId = backStackEntry.arguments?.getString("tripId")
+                        )
                     }
                 }
+            }
+        }
+    }
+}
 
-                Scaffold(
-                    snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-                ) { padding ->
-                    Column(
+@Composable
+fun MainScreen(navController: NavController) {
+    val viewModel: TripViewModel = viewModel()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val trips by viewModel.trips.collectAsState()
+    val tripCreationMessage by viewModel.tripCreationMessage.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+    var tripToDelete by remember { mutableStateOf<Trip?>(null) }
+
+    LaunchedEffect(Unit) {
+        viewModel.loadTrips()
+    }
+
+    LaunchedEffect(tripCreationMessage) {
+        tripCreationMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.messageShown()
+        }
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .clickable {
+                        coroutineScope.launch {
+                            viewModel.createTrip("Test Trip", "Banff")
+                        }
+                    },
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Image(
+                        painter = painterResource(id = R.drawable.moraine_lake),
+                        contentDescription = "Moraine Lake",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(padding)
-                            .padding(16.dp)
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    viewModel.createTrip("Test Trip", "Toronto")
-                                }
+                        Text(
+                            text = "Create New Trip",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
+                }
+            }
+
+            LazyColumn {
+                items(trips) { trip ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .padding(vertical = 8.dp)
+                            .clickable {
+                                viewModel.setSelectedTrip(trip)
+                                navController.navigate("single_trip/${trip.id}")
                             },
-                            modifier = Modifier.fillMaxWidth(),
-                            interactionSource = interactionSource
-                        ) {
-                            Text(
-                                text = "Create Trip",
-                                color = if (isPressed) Color.Gray else Color.White
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            Image(
+                                painter = painterResource(id = R.drawable.toronto),
+                                contentDescription = trip.title,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
                             )
-                        }
-
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    viewModel.loadTrips()
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Load Your Trips")
-                        }
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-
-                                    markerViewModel.createMarker(
-                                        "74460e74-3ad3-4647-94d6-2590a2d7ca96"
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.BottomStart
+                            ) {
+                                Column {
+                                    Text(
+                                        text = trip.title,
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
                                     )
-
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Create Marker")
-                        }
-
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    markerViewModel.loadMarkers(
-                                        "74460e74-3ad3-4647-94d6-2590a2d7ca96"
+                                    Text(
+                                        text = "Trip to ${trip.city}",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White.copy(alpha = 0.9f)
                                     )
                                 }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Load Markers")
-                        }
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    markerViewModel.updateFirstMarker("Updated Marker")
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Update First Marker")
-                        }
-
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    markerViewModel.deleteFirstMarker()
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Delete First Marker")
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // --- MarkerPhoto Buttons ---
-                        Text("MarkerPhoto Actions", style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    markerPhotoViewModel.loadMarkerPhotos("d30a57c2-bfe0-438f-b293-3dd8cb7e3c1b")
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Load Marker Photos")
-                        }
-
-                        UploadPhotoButton(markerPhotoViewModel)
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    if (markerPhotos.isNotEmpty()) {
-                                        val photo = markerPhotos.first()
-                                        markerPhotoViewModel.updateMarkerPhoto(
-                                            photoId = photo.id!!,
-                                            markerId = "1c3642ca-5d00-442f-b817-38c9f83dcd87",
-                                            newUrl = "https://example.com/updated-photo.jpg"
-                                        )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp),
+                                contentAlignment = Alignment.BottomEnd
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        tripToDelete = trip
                                     }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("Update First Photo") }
-
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    if (markerPhotos.isNotEmpty()) {
-                                        val photo = markerPhotos.first()
-                                        markerPhotoViewModel.deleteMarkerPhoto(
-                                            photo.id!!,
-                                            "1c3642ca-5d00-442f-b817-38c9f83dcd87"
-                                        )
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("Delete First Photo") }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        LazyColumn { items(trips) { trip -> Text(text = trip.title) } }
-
-                        LazyColumn { items(markers) { marker -> Text(text = marker.title) } }
-
-                        LazyColumn {
-                            items(markerPhotos) { photo ->
-                                Column(modifier = Modifier.padding(vertical = 8.dp)) {
-
-                                    Text("Photo ID: ${photo.id}")
-
-                                    AsyncImage(
-                                        model = photo.photoUrl,
-                                        contentDescription = "Marker Photo",
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(200.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete trip",
+                                        tint = Color.White
                                     )
                                 }
                             }
@@ -214,38 +213,31 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-}
 
-// --- UploadPhotoButton Composable ---
-@Composable
-fun UploadPhotoButton(markerPhotoViewModel: MarkerPhotoViewModel) {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            try {
-                val inputStream = context.contentResolver.openInputStream(uri)
-                val fileBytes = inputStream!!.readBytes()
-                val fileName = "photo_${System.currentTimeMillis()}.jpg"
-
-                coroutineScope.launch {
-                    markerPhotoViewModel.uploadAndCreateMarkerPhoto(
-                        "d30a57c2-bfe0-438f-b293-3dd8cb7e3c1b",
-                        fileName,
-                        fileBytes
-                    )
+    tripToDelete?.let { trip ->
+        AlertDialog(
+            onDismissRequest = { tripToDelete = null },
+            title = { Text("Delete Trip") },
+            text = { Text("Are you sure you want to delete this trip?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            viewModel.deleteTrip(trip.id)
+                        }
+                        tripToDelete = null
+                    }
+                ) {
+                    Text("Delete")
                 }
-
-            } catch (e: Exception) {
-                e.printStackTrace()
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { tripToDelete = null }
+                ) {
+                    Text("Cancel")
+                }
             }
-        }
-    }
-
-    Button(onClick = { galleryLauncher.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
-        Text("Pick Image from Gallery")
+        )
     }
 }

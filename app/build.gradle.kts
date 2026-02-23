@@ -28,6 +28,7 @@ android {
         properties.load(project.rootProject.file("local.properties").inputStream())
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${properties.getProperty("SUPABASE_PUBLISHABLE_KEY")}\"")
         buildConfigField("String", "SUPABASE_URL", "\"${properties.getProperty("SUPABASE_URL")}\"")
+        buildConfigField("String", "GEOAPIFY_API_KEY", "\"${properties.getProperty("GEOAPIFY_API_KEY")}\"")
     }
 
     buildTypes {
@@ -71,6 +72,10 @@ dependencies {
     implementation("io.ktor:ktor-client-android:3.4.0")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
 
+    // Mapbox
+    implementation("com.mapbox.maps:android-ndk27:11.18.2")
+    implementation("com.mapbox.extension:maps-compose-ndk27:11.18.2")
+    implementation ("com.mapbox.mapboxsdk:mapbox-android-gestures:x.y.z")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
 
@@ -84,5 +89,13 @@ dependencies {
 
     // Lifecycle
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+
+    // Navigation
+    implementation("androidx.navigation:navigation-compose:2.7.7")
+
     implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // Accompanist
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 }
