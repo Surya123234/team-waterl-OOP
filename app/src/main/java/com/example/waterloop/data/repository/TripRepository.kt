@@ -4,25 +4,23 @@ import com.example.waterloop.data.model.Trip
 import com.example.waterloop.data.model.TripMember
 import com.example.waterloop.data.remote.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
-import java.util.UUID
 
 class TripRepository {
 
     private val client = SupabaseClient.client.postgrest
     private val authRepository = AuthRepository()
 
-    suspend fun createTrip(title: String, city: String?): Trip? {
-
-//         val userId = authRepository.getCurrentUserId() ?: return null
+    suspend fun createTrip(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
         val userId = "20f5fdd5-97b5-4ced-8d56-1f5d93c8e716"
         val trip = Trip(
             ownerId = userId,
             title = title,
-            city = city
+            city = city,
+            startDate = startDate,
+            endDate = endDate
         )
 
         return try {
-            // Insert trip
             val insertedTrip = client.from("trips")
                 .insert(trip) {
                     select()
@@ -31,7 +29,6 @@ class TripRepository {
 
             val insertedId = insertedTrip.id ?: return null
 
-            // Insert owner membership
             val member = TripMember(
                 tripId = insertedId,
                 userId = userId,
@@ -42,7 +39,21 @@ class TripRepository {
 
             insertedTrip
         } catch (e: Exception) {
-            // Log exception
+            null
+        }
+    }
+
+    suspend fun updateTrip(trip: Trip): Trip? {
+        return try {
+            client.from("trips")
+                .update(trip) {
+                    filter {
+                        eq("id", trip.id!!)
+                    }
+                    select()
+                }
+                .decodeSingle<Trip>()
+        } catch (e: Exception) {
             null
         }
     }
@@ -60,7 +71,6 @@ class TripRepository {
             false
         }
     }
-
 
     suspend fun getTrips(): List<Trip> {
         return client.from("trips")

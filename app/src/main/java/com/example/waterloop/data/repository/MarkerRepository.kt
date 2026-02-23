@@ -12,7 +12,9 @@ class MarkerRepository {
         title: String,
         latitude: Double,
         longitude: Double,
-//others included in the data class
+        description: String? = null,
+        category: String? = null,
+        notes: String? = null
     ): Marker {
 
         val marker = Marker(
@@ -20,6 +22,9 @@ class MarkerRepository {
             title = title,
             latitude = latitude,
             longitude = longitude,
+            description = description,
+            category = category,
+            notes = notes
         )
         return client.from("markers")
             .insert(marker) {
@@ -27,6 +32,7 @@ class MarkerRepository {
             }
             .decodeSingle()
     }
+
     //read markers for a specific trip
     suspend fun getMarkers(tripId: String): List<Marker> {
 
@@ -38,6 +44,7 @@ class MarkerRepository {
             }
             .decodeList()
     }
+
     // update marker stuff
     suspend fun updateMarker(marker: Marker) {
 
@@ -48,6 +55,7 @@ class MarkerRepository {
                 }
             }
     }
+
     //delete the marker
     suspend fun deleteMarker(markerId: String) {
         client.from("markers")

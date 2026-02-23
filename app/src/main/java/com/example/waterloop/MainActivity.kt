@@ -8,27 +8,37 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -54,6 +64,10 @@ import com.example.waterloop.ui.theme.WaterlOOPTheme
 import com.example.waterloop.data.model.Trip
 import com.example.waterloop.ui.trips.TripViewModel
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,6 +95,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(navController: NavController) {
     val viewModel: TripViewModel = viewModel()
@@ -88,7 +103,25 @@ fun MainScreen(navController: NavController) {
     val trips by viewModel.trips.collectAsState()
     val tripCreationMessage by viewModel.tripCreationMessage.collectAsState()
     val coroutineScope = rememberCoroutineScope()
+    
     var tripToDelete by remember { mutableStateOf<Trip?>(null) }
+    var tripToEdit by remember { mutableStateOf<Trip?>(null) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+
+    // Dialog state
+    var tripTitle by remember { mutableStateOf("") }
+    var tripCity by remember { mutableStateOf("") }
+    var tripStartDate by remember { mutableStateOf("") }
+    var tripEndDate by remember { mutableStateOf("") }
+
+    // Date Picker state
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+    
+    val datePickerStateStart = rememberDatePickerState()
+    val datePickerStateEnd = rememberDatePickerState()
+    
+    val dateFormatter = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).apply { timeZone = TimeZone.getTimeZone("UTC") } }
 
     LaunchedEffect(Unit) {
         viewModel.loadTrips()
@@ -111,14 +144,14 @@ fun MainScreen(navController: NavController) {
                 .padding(padding)
                 .padding(16.dp)
         ) {
+            // Create Trip Header Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
                     .clickable {
-                        coroutineScope.launch {
-                            viewModel.createTrip("Test Trip", "Banff")
-                        }
+                        tripTitle = ""; tripCity = ""; tripStartDate = ""; tripEndDate = ""
+                        showCreateDialog = true
                     },
                 shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -187,14 +220,36 @@ fun MainScreen(navController: NavController) {
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White.copy(alpha = 0.9f)
                                     )
+                                    if (!trip.startDate.isNullOrBlank()) {
+                                        Text(
+                                            text = "${trip.startDate} - ${trip.endDate.orEmpty()}",
+                                            fontSize = 12.sp,
+                                            color = Color.White.copy(alpha = 0.8f)
+                                        )
+                                    }
                                 }
                             }
-                            Box(
+                            // Action Icons (Edit and Delete)
+                            Row(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(8.dp),
-                                contentAlignment = Alignment.BottomEnd
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
                             ) {
+                                IconButton(
+                                    onClick = {
+                                        tripToEdit = trip
+                                        tripTitle = trip.title
+                                        tripCity = trip.city ?: ""
+                                        tripStartDate = trip.startDate ?: ""
+                                        tripEndDate = trip.endDate ?: ""
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit trip",
+                                        tint = Color.White
+                                    )
+                                }
                                 IconButton(
                                     onClick = {
                                         tripToDelete = trip
@@ -214,30 +269,184 @@ fun MainScreen(navController: NavController) {
         }
     }
 
+    // Create Trip Dialog
+    if (showCreateDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text("Plan a New Journey") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = tripTitle, 
+                        onValueChange = { tripTitle = it }, 
+                        label = { Text("Trip Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = tripCity, 
+                        onValueChange = { tripCity = it }, 
+                        label = { Text("City") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row {
+                        OutlinedTextField(
+                            value = tripStartDate,
+                            onValueChange = { tripStartDate = it },
+                            label = { Text("Start Date") },
+                            placeholder = { Text("YYYY-MM-DD") },
+                            modifier = Modifier.weight(1f),
+                            trailingIcon = {
+                                IconButton(onClick = { showStartDatePicker = true }) {
+                                    Icon(Icons.Default.DateRange, contentDescription = "Pick Start Date")
+                                }
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = tripEndDate,
+                            onValueChange = { tripEndDate = it },
+                            label = { Text("End Date") },
+                            placeholder = { Text("YYYY-MM-DD") },
+                            modifier = Modifier.weight(1f),
+                            trailingIcon = {
+                                IconButton(onClick = { showEndDatePicker = true }) {
+                                    Icon(Icons.Default.DateRange, contentDescription = "Pick End Date")
+                                }
+                            }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.createTrip(tripTitle, tripCity, tripStartDate, tripEndDate)
+                    showCreateDialog = false
+                }) { Text("Create") }
+            },
+            dismissButton = { TextButton(onClick = { showCreateDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    // Edit Trip Dialog
+    tripToEdit?.let { trip ->
+        AlertDialog(
+            onDismissRequest = { tripToEdit = null },
+            title = { Text("Edit Trip Details") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = tripTitle, 
+                        onValueChange = { tripTitle = it }, 
+                        label = { Text("Trip Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = tripCity, 
+                        onValueChange = { tripCity = it }, 
+                        label = { Text("City") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row {
+                        OutlinedTextField(
+                            value = tripStartDate,
+                            onValueChange = { tripStartDate = it },
+                            label = { Text("Start Date") },
+                            placeholder = { Text("YYYY-MM-DD") },
+                            modifier = Modifier.weight(1f),
+                            trailingIcon = {
+                                IconButton(onClick = { showStartDatePicker = true }) {
+                                    Icon(Icons.Default.DateRange, contentDescription = "Pick Start Date")
+                                }
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = tripEndDate,
+                            onValueChange = { tripEndDate = it },
+                            label = { Text("End Date") },
+                            placeholder = { Text("YYYY-MM-DD") },
+                            modifier = Modifier.weight(1f),
+                            trailingIcon = {
+                                IconButton(onClick = { showEndDatePicker = true }) {
+                                    Icon(Icons.Default.DateRange, contentDescription = "Pick End Date")
+                                }
+                            }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.updateTrip(trip.copy(
+                        title = tripTitle,
+                        city = tripCity,
+                        startDate = tripStartDate,
+                        endDate = tripEndDate
+                    ))
+                    tripToEdit = null
+                }) { Text("Save Changes") }
+            },
+            dismissButton = { TextButton(onClick = { tripToEdit = null }) { Text("Cancel") } }
+        )
+    }
+
+    // Start Date Picker
+    if (showStartDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerStateStart.selectedDateMillis?.let {
+                        tripStartDate = dateFormatter.format(Date(it))
+                    }
+                    showStartDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerStateStart)
+        }
+    }
+
+    // End Date Picker
+    if (showEndDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerStateEnd.selectedDateMillis?.let {
+                        tripEndDate = dateFormatter.format(Date(it))
+                    }
+                    showEndDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerStateEnd)
+        }
+    }
+
+    // Delete Confirmation
     tripToDelete?.let { trip ->
         AlertDialog(
             onDismissRequest = { tripToDelete = null },
             title = { Text("Delete Trip") },
-            text = { Text("Are you sure you want to delete this trip?") },
+            text = { Text("Are you sure you want to delete '${trip.title}'? All markers and photos will be lost.") },
             confirmButton = {
-                Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            viewModel.deleteTrip(trip.id)
-                        }
-                        tripToDelete = null
-                    }
-                ) {
-                    Text("Delete")
-                }
+                Button(onClick = {
+                    coroutineScope.launch { viewModel.deleteTrip(trip.id) }
+                    tripToDelete = null
+                }) { Text("Delete") }
             },
-            dismissButton = {
-                TextButton(
-                    onClick = { tripToDelete = null }
-                ) {
-                    Text("Cancel")
-                }
-            }
+            dismissButton = { TextButton(onClick = { tripToDelete = null }) { Text("Cancel") } }
         )
     }
 }

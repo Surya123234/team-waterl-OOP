@@ -2,7 +2,14 @@ package com.example.waterloop
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,14 +18,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -36,20 +49,27 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import com.example.waterloop.data.model.Marker as DbMarker
+import com.example.waterloop.ui.markers.MarkerPhotoViewModel
+import com.example.waterloop.ui.trips.MarkerViewModel
 import com.example.waterloop.ui.trips.TripViewModel
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.extension.compose.MapEffect
@@ -66,6 +86,7 @@ import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -81,57 +102,68 @@ data class GeocodeResponse(
 @Serializable
 data class GeocodeResult(
     val lon: Double,
-    val lat: Double
+    val lat: Double,
+    val rank: GeocodeRank? = null
 )
 
-data class MapMarker(
-    val point: Point,
-    val text: String
+@Serializable
+data class GeocodeRank(
+    val confidence: Double? = null,
+    @SerialName("match_type")
+    val matchType: String? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TripScreen(navController: NavController, tripId: String?, viewModel: TripViewModel = viewModel()) {
+fun TripScreen(
+    navController: NavController,
+    tripId: String?,
+    tripViewModel: TripViewModel = viewModel(),
+    markerViewModel: MarkerViewModel = viewModel(),
+    photoViewModel: MarkerPhotoViewModel = viewModel()
+) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val selectedTrip by viewModel.selectedTrip.collectAsState()
-    var permissionRequestCount by remember {
-        mutableStateOf(1)
+    val selectedTrip by tripViewModel.selectedTrip.collectAsState()
+    val markers by markerViewModel.markers.collectAsState()
+    val photos by photoViewModel.markerPhotos.collectAsState()
+
+    var permissionRequestCount by remember { mutableStateOf(1) }
+    var showMap by remember { mutableStateOf(false) }
+    var showRequestPermissionButton by remember { mutableStateOf(false) }
+    var showMarkerDialog by remember { mutableStateOf(false) }
+    
+    // Form fields for marker creation
+    var markerTitle by remember { mutableStateOf("") }
+    var markerDescription by remember { mutableStateOf("") }
+    var markerCategory by remember { mutableStateOf("") }
+    var markerNotes by remember { mutableStateOf("") }
+    
+    // Local error message state for the dialog
+    var markerDialogError by remember { mutableStateOf<String?>(null) }
+
+    var selectedMarkerId by remember { mutableStateOf<String?>(null) }
+    var showMarkerSheet by remember { mutableStateOf(false) }
+    var showAllMarkersSheet by remember { mutableStateOf(false) }
+    var showEditMarkerDialog by remember { mutableStateOf(false) }
+    
+    // Derived state: Get the latest marker data from the list
+    val selectedMarker = remember(markers, selectedMarkerId) {
+        markers.find { it.id == selectedMarkerId }
     }
-    var showMap by remember {
-        mutableStateOf(false)
-    }
-    var showRequestPermissionButton by remember {
-        mutableStateOf(false)
-    }
-    var showMarkerDialog by remember {
-        mutableStateOf(false)
-    }
-    var markerText by remember {
-        mutableStateOf("")
-    }
-    var selectedMarker by remember {
-        mutableStateOf<MapMarker?>(null)
-    }
-    var showMarkerSheet by remember {
-        mutableStateOf(false)
-    }
-    var showAllMarkersSheet by remember {
-        mutableStateOf(false)
-    }
-    var showEditMarkerDialog by remember {
-        mutableStateOf(false)
-    }
-    var editMarkerText by remember {
-        mutableStateOf("")
-    }
-    var longPressedPoint by remember {
-        mutableStateOf<Point?>(null)
-    }
+
+    // Form fields for marker editing
+    var editMarkerTitle by remember { mutableStateOf("") }
+    var editMarkerDescription by remember { mutableStateOf("") }
+    var editMarkerCategory by remember { mutableStateOf("") }
+    var editMarkerNotes by remember { mutableStateOf("") }
+
+    var longPressedPoint by remember { mutableStateOf<Point?>(null) }
+    
     val markerSheetState = rememberModalBottomSheetState()
     val allMarkersSheetState = rememberModalBottomSheetState()
-    val markers = remember { mutableStateListOf<MapMarker>() }
+    
     val httpClient = remember {
         HttpClient(Android) {
             install(ContentNegotiation) {
@@ -144,11 +176,41 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
         }
     }
 
-    LaunchedEffect(tripId) {
-        if (tripId != null) {
-            viewModel.loadTripById(tripId)
+    // Image Picker Launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            scope.launch {
+                try {
+                    val markerId = selectedMarkerId ?: return@launch
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val bytes = inputStream?.readBytes() ?: return@launch
+                    val fileName = "photo_${System.currentTimeMillis()}.jpg"
+                    
+                    photoViewModel.uploadAndCreateMarkerPhoto(markerId, fileName, bytes)
+                    snackbarHostState.showSnackbar("Photo uploaded successfully")
+                } catch (e: Exception) {
+                    snackbarHostState.showSnackbar("Failed to upload photo")
+                }
+            }
         }
     }
+
+    LaunchedEffect(tripId) {
+        if (tripId != null) {
+            tripViewModel.loadTripById(tripId)
+            markerViewModel.loadMarkers(tripId)
+        }
+    }
+
+    // Load photos whenever a marker is selected
+    LaunchedEffect(selectedMarkerId) {
+        selectedMarkerId?.let { id ->
+            photoViewModel.loadMarkerPhotos(id)
+        }
+    }
+
     val mapViewportState = rememberMapViewportState {
         setCameraOptions {
             zoom(0.0)
@@ -160,7 +222,7 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(selectedTrip?.title ?: "Failed to get data") },
+                title = { Text(selectedTrip?.title ?: "Loading Trip...") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -218,9 +280,9 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                     ) {
                         markers.forEach { marker ->
                             Marker(
-                                point = marker.point,
+                                point = Point.fromLngLat(marker.longitude, marker.latitude),
                                 onClick = {
-                                    selectedMarker = marker
+                                    selectedMarkerId = marker.id
                                     showMarkerSheet = true
                                     true
                                 }
@@ -281,16 +343,47 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
             onDismissRequest = {
                 showMarkerDialog = false
                 longPressedPoint = null
+                markerDialogError = null
             },
             title = { Text("Create Marker") },
             text = {
                 Column {
                     OutlinedTextField(
-                        value = markerText,
-                        onValueChange = { markerText = it },
-                        label = { Text("Enter Location Name") },
+                        value = markerTitle,
+                        onValueChange = { markerTitle = it; markerDialogError = null },
+                        label = { Text("Title / Location") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = markerDescription,
+                        onValueChange = { markerDescription = it },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = markerCategory,
+                        onValueChange = { markerCategory = it },
+                        label = { Text("Category (e.g., Food, Sight)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = markerNotes,
+                        onValueChange = { markerNotes = it },
+                        label = { Text("Notes") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    if (markerDialogError != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = markerDialogError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -298,67 +391,76 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                     onClick = {
                         scope.launch {
                             try {
+                                if (tripId == null) return@launch
                                 val point = longPressedPoint
                                 if (point != null) {
-                                    // Long press - use the pressed coordinates
-                                    val newMarker = MapMarker(
-                                        point = point,
-                                        text = markerText
+                                    markerViewModel.createMarker(
+                                        tripId = tripId,
+                                        title = markerTitle,
+                                        latitude = point.latitude(),
+                                        longitude = point.longitude(),
+                                        description = markerDescription,
+                                        category = markerCategory,
+                                        notes = markerNotes
                                     )
-                                    markers.add(newMarker)
-                                    mapViewportState.setCameraOptions {
-                                        center(newMarker.point)
-                                        zoom(16.0)
-                                    }
                                     showMarkerDialog = false
-                                    markerText = ""
+                                    markerTitle = ""; markerDescription = ""; markerCategory = ""; markerNotes = ""
                                     longPressedPoint = null
+                                    markerDialogError = null
                                 } else {
-                                    // Button press - geocode the location
-                                    val encodedText = URLEncoder.encode(
-                                        markerText,
-                                        StandardCharsets.UTF_8.toString()
-                                    )
+                                    val sanitizedText = markerTitle.trim().lowercase()
+                                    if (sanitizedText.isEmpty()) {
+                                        markerDialogError = "Please enter a location name"
+                                        return@launch
+                                    }
+
+                                    val encodedText = URLEncoder.encode(sanitizedText, StandardCharsets.UTF_8.toString())
                                     val response = httpClient.get(
                                         "https://api.geoapify.com/v1/geocode/search?text=${encodedText}&format=json&apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
                                     ).body<GeocodeResponse>()
 
                                     if (!response.results.isNullOrEmpty()) {
                                         val result = response.results[0]
-                                        val newMarker = MapMarker(
-                                            point = Point.fromLngLat(result.lon, result.lat),
-                                            text = markerText
-                                        )
-                                        markers.add(newMarker)
-                                        mapViewportState.setCameraOptions {
-                                            center(newMarker.point)
-                                            zoom(16.0)
+                                        val confidence = result.rank?.confidence ?: 0.0
+                                        
+                                        if (confidence >= 0.7) {
+                                            markerViewModel.createMarker(
+                                                tripId = tripId,
+                                                title = markerTitle,
+                                                latitude = result.lat,
+                                                longitude = result.lon,
+                                                description = markerDescription,
+                                                category = markerCategory,
+                                                notes = markerNotes
+                                            )
+                                            mapViewportState.setCameraOptions {
+                                                center(Point.fromLngLat(result.lon, result.lat))
+                                                zoom(16.0)
+                                            }
+                                            showMarkerDialog = false
+                                            markerTitle = ""; markerDescription = ""; markerCategory = ""; markerNotes = ""
+                                            markerDialogError = null
+                                        } else {
+                                            markerDialogError = "Unable to find a precise location for '$markerTitle'. Please recheck the name."
                                         }
-                                        showMarkerDialog = false
-                                        markerText = ""
                                     } else {
-                                        snackbarHostState.showSnackbar("Location not found")
+                                        markerDialogError = "Location not found. Please try a different name."
                                     }
                                 }
                             } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("Failed to geocode location: ${e.message}")
+                                markerDialogError = "Error: ${e.message}"
                             }
                         }
                     }
                 ) {
-                    Text("Create Marker")
+                    Text("Create")
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = {
-                        showMarkerDialog = false
-                        markerText = ""
-                        longPressedPoint = null
-                    }
-                ) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { 
+                    showMarkerDialog = false
+                    markerDialogError = null
+                }) { Text("Cancel") }
             }
         )
     }
@@ -367,7 +469,7 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
         ModalBottomSheet(
             onDismissRequest = {
                 showMarkerSheet = false
-                selectedMarker = null
+                selectedMarkerId = null
             },
             sheetState = markerSheetState
         ) {
@@ -380,54 +482,146 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = selectedMarker?.text.orEmpty(),
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = selectedMarker.title,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        if (!selectedMarker.category.isNullOrBlank()) {
+                            Text(
+                                text = selectedMarker.category.orEmpty(),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     IconButton(onClick = {
-                        editMarkerText = selectedMarker?.text.orEmpty()
+                        editMarkerTitle = selectedMarker.title
+                        editMarkerDescription = selectedMarker.description.orEmpty()
+                        editMarkerCategory = selectedMarker.category.orEmpty()
+                        editMarkerNotes = selectedMarker.notes.orEmpty()
                         showEditMarkerDialog = true
                     }) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit marker"
-                        )
+                        Icon(Icons.Default.Edit, contentDescription = "Edit")
                     }
                     IconButton(onClick = {
-                        selectedMarker?.let { marker ->
-                            markers.remove(marker)
-                            showMarkerSheet = false
-                            selectedMarker = null
+                        if (selectedMarker.id != null && tripId != null) {
+                            markerViewModel.deleteMarker(selectedMarker.id, tripId)
                         }
+                        showMarkerSheet = false
+                        selectedMarkerId = null
                     }) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete marker"
-                        )
+                        Icon(Icons.Default.Delete, contentDescription = "Delete")
                     }
                 }
+                
+                if (!selectedMarker.description.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = selectedMarker.description.orEmpty(), style = MaterialTheme.typography.bodyMedium)
+                }
+
+                if (!selectedMarker.notes.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = "Notes: ${selectedMarker.notes.orEmpty()}", style = MaterialTheme.typography.bodySmall)
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
-                Image(
-                    painter = painterResource(id = R.drawable.google_dublin),
-                    contentDescription = "Marker image",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    contentScale = ContentScale.Crop
-                )
+                
+                // Multiple Photo Display
+                if (photos.isNotEmpty()) {
+                    LazyRow(modifier = Modifier.fillMaxWidth()) {
+                        items(photos) { photo ->
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 8.dp)
+                                    .size(200.dp)
+                            ) {
+                                AsyncImage(
+                                    model = photo.photoUrl,
+                                    contentDescription = "Marker photo",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                                // Delete Photo Button (Dustbin)
+                                IconButton(
+                                    onClick = {
+                                        photo.id?.let { id ->
+                                            photoViewModel.deleteMarkerPhoto(id, selectedMarker.id!!)
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                        .size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Delete Photo",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Image(
+                        painter = painterResource(id = R.drawable.google_stock),
+                        contentDescription = "Placeholder",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(modifier = Modifier.fillMaxWidth()) {
+                    val isVisited = selectedMarker.visited
+                    
+                    // Button Animations
+                    val buttonColor by animateColorAsState(
+                        targetValue = if (isVisited) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
+                        label = "buttonColor"
+                    )
+                    
+                    var isPressed by remember { mutableStateOf(false) }
+                    val buttonScale by animateFloatAsState(
+                        targetValue = if (isPressed) 0.95f else 1f,
+                        animationSpec = spring(dampingRatio = 0.5f),
+                        label = "buttonScale"
+                    )
+
                     Button(
-                        modifier = Modifier.weight(1f),
-                        onClick = {}
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(buttonScale),
+                        colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
+                        onClick = {
+                            scope.launch {
+                                isPressed = true
+                                markerViewModel.updateMarker(selectedMarker.copy(visited = !selectedMarker.visited))
+                                delay(100)
+                                isPressed = false
+                            }
+                        }
                     ) {
-                        Text("Mark as visited")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isVisited) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                            }
+                            Crossfade(targetState = isVisited, label = "buttonText") { visited ->
+                                Text(if (visited) "Visited" else "Mark as visited")
+                            }
+                        }
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Button(
                         modifier = Modifier.weight(1f),
-                        onClick = {}
+                        onClick = {
+                            imagePickerLauncher.launch("image/*")
+                        }
                     ) {
                         Text("Add Photos")
                     }
@@ -442,26 +636,45 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
             onDismissRequest = { showEditMarkerDialog = false },
             title = { Text("Edit Marker") },
             text = {
-                OutlinedTextField(
-                    value = editMarkerText,
-                    onValueChange = { editMarkerText = it },
-                    label = { Text("Marker Name") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Column {
+                    OutlinedTextField(
+                        value = editMarkerTitle,
+                        onValueChange = { editMarkerTitle = it },
+                        label = { Text("Title") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editMarkerDescription,
+                        onValueChange = { editMarkerDescription = it },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editMarkerCategory,
+                        onValueChange = { editMarkerCategory = it },
+                        label = { Text("Category") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editMarkerNotes,
+                        onValueChange = { editMarkerNotes = it },
+                        label = { Text("Notes") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        selectedMarker?.let { oldMarker ->
-                            val index = markers.indexOf(oldMarker)
-                            if (index != -1) {
-                                markers[index] = MapMarker(
-                                    point = oldMarker.point,
-                                    text = editMarkerText
-                                )
-                                selectedMarker = markers[index]
-                            }
-                        }
+                        markerViewModel.updateMarker(selectedMarker.copy(
+                            title = editMarkerTitle,
+                            description = editMarkerDescription,
+                            category = editMarkerCategory,
+                            notes = editMarkerNotes
+                        ))
                         showEditMarkerDialog = false
                     }
                 ) {
@@ -469,31 +682,18 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = { showEditMarkerDialog = false }
-                ) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showEditMarkerDialog = false }) { Text("Cancel") }
             }
         )
     }
 
     if (showAllMarkersSheet) {
         ModalBottomSheet(
-            onDismissRequest = {
-                showAllMarkersSheet = false
-            },
+            onDismissRequest = { showAllMarkersSheet = false },
             sheetState = allMarkersSheetState
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = "All Markers",
-                    style = MaterialTheme.typography.titleLarge
-                )
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                Text(text = "All Markers", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
                 if (markers.isEmpty()) {
                     Text("No markers added yet")
@@ -502,16 +702,14 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                         Button(
                             onClick = {
                                 mapViewportState.setCameraOptions {
-                                    center(marker.point)
+                                    center(Point.fromLngLat(marker.longitude, marker.latitude))
                                     zoom(16.0)
                                 }
                                 showAllMarkersSheet = false
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                         ) {
-                            Text(marker.text)
+                            Text(marker.title)
                         }
                     }
                 }
