@@ -261,6 +261,10 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                                         text = markerText
                                     )
                                     markers.add(newMarker)
+                                    mapViewportState.setCameraOptions {
+                                        center(newMarker.point)
+                                        zoom(16.0)
+                                    }
                                     showMarkerDialog = false
                                     markerText = ""
                                 } else {
