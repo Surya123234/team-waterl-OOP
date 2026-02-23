@@ -118,6 +118,9 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
     var showAllMarkersSheet by remember {
         mutableStateOf(false)
     }
+    var longPressedPoint by remember {
+        mutableStateOf<Point?>(null)
+    }
     val markerSheetState = rememberModalBottomSheetState()
     val allMarkersSheetState = rememberModalBottomSheetState()
     val markers = remember { mutableStateListOf<MapMarker>() }
@@ -199,6 +202,11 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                     MapboxMap(
                         Modifier.fillMaxSize(),
                         mapViewportState = mapViewportState,
+                        onMapLongClickListener = { point ->
+                            longPressedPoint = point
+                            showMarkerDialog = true
+                            true
+                        }
                     ) {
                         markers.forEach { marker ->
                             Marker(
@@ -262,7 +270,10 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
 
     if (showMarkerDialog) {
         AlertDialog(
-            onDismissRequest = { showMarkerDialog = false },
+            onDismissRequest = {
+                showMarkerDialog = false
+                longPressedPoint = null
+            },
             title = { Text("Create Marker") },
             text = {
                 Column {
@@ -279,15 +290,11 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                     onClick = {
                         scope.launch {
                             try {
-                                val encodedText = URLEncoder.encode(markerText, StandardCharsets.UTF_8.toString())
-                                val response = httpClient.get(
-                                    "https://api.geoapify.com/v1/geocode/search?text=${encodedText}&format=json&apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
-                                ).body<GeocodeResponse>()
-                                
-                                if (!response.results.isNullOrEmpty()) {
-                                    val result = response.results[0]
+                                val point = longPressedPoint
+                                if (point != null) {
+                                    // Long press - use the pressed coordinates
                                     val newMarker = MapMarker(
-                                        point = Point.fromLngLat(result.lon, result.lat),
+                                        point = point,
                                         text = markerText
                                     )
                                     markers.add(newMarker)
@@ -297,8 +304,30 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                                     }
                                     showMarkerDialog = false
                                     markerText = ""
+                                    longPressedPoint = null
                                 } else {
-                                    snackbarHostState.showSnackbar("Location not found")
+                                    // Button press - geocode the location
+                                    val encodedText = URLEncoder.encode(markerText, StandardCharsets.UTF_8.toString())
+                                    val response = httpClient.get(
+                                        "https://api.geoapify.com/v1/geocode/search?text=${encodedText}&format=json&apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
+                                    ).body<GeocodeResponse>()
+                                    
+                                    if (!response.results.isNullOrEmpty()) {
+                                        val result = response.results[0]
+                                        val newMarker = MapMarker(
+                                            point = Point.fromLngLat(result.lon, result.lat),
+                                            text = markerText
+                                        )
+                                        markers.add(newMarker)
+                                        mapViewportState.setCameraOptions {
+                                            center(newMarker.point)
+                                            zoom(16.0)
+                                        }
+                                        showMarkerDialog = false
+                                        markerText = ""
+                                    } else {
+                                        snackbarHostState.showSnackbar("Location not found")
+                                    }
                                 }
                             } catch (e: Exception) {
                                 snackbarHostState.showSnackbar("Failed to geocode location: ${e.message}")
@@ -314,6 +343,7 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                     onClick = {
                         showMarkerDialog = false
                         markerText = ""
+                        longPressedPoint = null
                     }
                 ) {
                     Text("Cancel")
