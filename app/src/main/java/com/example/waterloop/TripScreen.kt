@@ -22,7 +22,9 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -40,8 +42,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.waterloop.ui.trips.TripViewModel
@@ -105,6 +109,17 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
     var markerText by remember {
         mutableStateOf("")
     }
+    var selectedMarker by remember {
+        mutableStateOf<MapMarker?>(null)
+    }
+    var showMarkerSheet by remember {
+        mutableStateOf(false)
+    }
+    var showAllMarkersSheet by remember {
+        mutableStateOf(false)
+    }
+    val markerSheetState = rememberModalBottomSheetState()
+    val allMarkersSheetState = rememberModalBottomSheetState()
     val markers = remember { mutableStateListOf<MapMarker>() }
     val httpClient = remember {
         HttpClient(Android) {
@@ -180,23 +195,38 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                 }
             )
             if (showMap) {
-                MapboxMap(
-                    Modifier.fillMaxSize(),
-                    mapViewportState = mapViewportState,
-                ) {
-                    markers.forEach { marker ->
-                        Marker(
-                            point = marker.point
-                        )
-                    }
-                    MapEffect(Unit) { mapView ->
-                        mapView.location.updateSettings {
-                            locationPuck = createDefault2DPuck(withBearing = true)
-                            puckBearingEnabled = true
-                            puckBearing = PuckBearing.HEADING
-                            enabled = true
+                Box(modifier = Modifier.fillMaxSize()) {
+                    MapboxMap(
+                        Modifier.fillMaxSize(),
+                        mapViewportState = mapViewportState,
+                    ) {
+                        markers.forEach { marker ->
+                            Marker(
+                                point = marker.point,
+                                onClick = {
+                                    selectedMarker = marker
+                                    showMarkerSheet = true
+                                    true
+                                }
+                            )
                         }
-                        mapViewportState.transitionToFollowPuckState()
+                        MapEffect(Unit) { mapView ->
+                            mapView.location.updateSettings {
+                                locationPuck = createDefault2DPuck(withBearing = true)
+                                puckBearingEnabled = true
+                                puckBearing = PuckBearing.HEADING
+                                enabled = true
+                            }
+                            mapViewportState.transitionToFollowPuckState()
+                        }
+                    }
+                    Button(
+                        onClick = { showAllMarkersSheet = true },
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 16.dp, bottom = 16.dp)
+                    ) {
+                        Text("View All Markers")
                     }
                 }
             }
@@ -290,5 +320,94 @@ fun TripScreen(navController: NavController, tripId: String?, viewModel: TripVie
                 }
             }
         )
+    }
+
+    if (showMarkerSheet && selectedMarker != null) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showMarkerSheet = false
+                selectedMarker = null
+            },
+            sheetState = markerSheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = selectedMarker?.text.orEmpty(),
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Image(
+                    painter = painterResource(id = R.drawable.google_dublin),
+                    contentDescription = "Marker image",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        modifier = Modifier.weight(1f),
+                        onClick = {}
+                    ) {
+                        Text("Mark as visited")
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Button(
+                        modifier = Modifier.weight(1f),
+                        onClick = {}
+                    ) {
+                        Text("Add Photos")
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
+    }
+
+    if (showAllMarkersSheet) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showAllMarkersSheet = false
+            },
+            sheetState = allMarkersSheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = "All Markers",
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                if (markers.isEmpty()) {
+                    Text("No markers added yet")
+                } else {
+                    markers.forEach { marker ->
+                        Button(
+                            onClick = {
+                                mapViewportState.setCameraOptions {
+                                    center(marker.point)
+                                    zoom(16.0)
+                                }
+                                showAllMarkersSheet = false
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Text(marker.text)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
     }
 }
