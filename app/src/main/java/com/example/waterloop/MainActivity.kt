@@ -4,6 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import coil.compose.AsyncImage
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -51,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -103,10 +109,12 @@ fun MainScreen(navController: NavController) {
     val trips by viewModel.trips.collectAsState()
     val tripCreationMessage by viewModel.tripCreationMessage.collectAsState()
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     
     var tripToDelete by remember { mutableStateOf<Trip?>(null) }
     var tripToEdit by remember { mutableStateOf<Trip?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var tripForCoverImage by remember { mutableStateOf<Trip?>(null) }
 
     // Dialog state
     var tripTitle by remember { mutableStateOf("") }
@@ -122,6 +130,34 @@ fun MainScreen(navController: NavController) {
     val datePickerStateEnd = rememberDatePickerState()
     
     val dateFormatter = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).apply { timeZone = TimeZone.getTimeZone("UTC") } }
+
+    // Image picker launcher for trip cover images
+    val coverImagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            coroutineScope.launch {
+                try {
+                    val trip = tripForCoverImage ?: return@launch
+                    val tripId = trip.id ?: return@launch
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val bytes = inputStream?.readBytes() ?: return@launch
+                    val fileName = "cover_${System.currentTimeMillis()}.jpg"
+
+                    val success = viewModel.uploadTripCoverImage(tripId, fileName, bytes)
+                    if (success) {
+                        snackbarHostState.showSnackbar("Cover image updated!")
+                    } else {
+                        snackbarHostState.showSnackbar("Failed to upload cover image")
+                    }
+                } catch (e: Exception) {
+                    snackbarHostState.showSnackbar("Failed to upload cover image")
+                } finally {
+                    tripForCoverImage = null
+                }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.loadTrips()
@@ -195,12 +231,22 @@ fun MainScreen(navController: NavController) {
                         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                     ) {
                         Box(modifier = Modifier.fillMaxSize()) {
-                            Image(
-                                painter = painterResource(id = R.drawable.toronto),
-                                contentDescription = trip.title,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
+                            if (!trip.coverImageUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = trip.coverImageUrl,
+                                    contentDescription = trip.title,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Image(
+                                    painter = painterResource(id = R.drawable.toronto),
+                                    contentDescription = trip.title,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -237,6 +283,18 @@ fun MainScreen(navController: NavController) {
                             ) {
                                 IconButton(
                                     onClick = {
+                                        tripForCoverImage = trip
+                                        coverImagePickerLauncher.launch("image/*")
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Change cover image",
+                                        tint = Color.White
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
                                         tripToEdit = trip
                                         tripTitle = trip.title
                                         tripCity = trip.city ?: ""
@@ -251,9 +309,7 @@ fun MainScreen(navController: NavController) {
                                     )
                                 }
                                 IconButton(
-                                    onClick = {
-                                        tripToDelete = trip
-                                    }
+                                    onClick = { tripToDelete = trip }
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,

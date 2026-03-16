@@ -4,10 +4,12 @@ import com.example.waterloop.data.model.Trip
 import com.example.waterloop.data.model.TripMember
 import com.example.waterloop.data.remote.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.storage.storage
 
 class TripRepository {
 
     private val client = SupabaseClient.client.postgrest
+    private val storage = SupabaseClient.client.storage
     private val authRepository = AuthRepository()
 
     suspend fun createTrip(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
@@ -88,6 +90,34 @@ class TripRepository {
                 }
                 .decodeSingleOrNull<Trip>()
         } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun uploadTripCoverImage(tripId: String, fileName: String, bytes: ByteArray): String? {
+        val bucketName = "trip-covers"
+        val path = "$tripId/$fileName"
+        val bucket = storage.from(bucketName)
+
+        println("Starting upload to bucket '$bucketName' at path '$path'")
+
+        return try {
+            bucket.upload(path, bytes) {
+                upsert = true
+            }
+
+            val publicUrl = bucket.publicUrl(path)
+            println("Upload succeeded! URL: $publicUrl")
+
+            // Fetch the current trip, then update it with the new cover URL
+            val trip = getTripById(tripId) ?: return null
+            val updatedTrip = trip.copy(coverImageUrl = publicUrl)
+            updateTrip(updatedTrip)
+
+            publicUrl
+        } catch (e: Exception) {
+            println("Upload failed: ${e.message}")
+            e.printStackTrace()
             null
         }
     }

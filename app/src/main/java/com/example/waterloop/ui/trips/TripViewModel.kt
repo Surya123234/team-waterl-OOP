@@ -77,4 +77,13 @@ class TripViewModel : ViewModel() {
             _selectedTrip.value = repository.getTripById(tripId)
         }
     }
+
+    suspend fun uploadTripCoverImage(tripId: String, fileName: String, bytes: ByteArray): Boolean {
+        val url = repository.uploadTripCoverImage(tripId, fileName, bytes)
+        if (url != null) {
+            loadTrips()
+            return true
+        }
+        return false
+    }
 }

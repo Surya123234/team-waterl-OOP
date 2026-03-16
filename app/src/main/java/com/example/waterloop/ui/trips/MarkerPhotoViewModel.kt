@@ -1,4 +1,4 @@
-package com.example.waterloop.ui.markers
+package com.example.waterloop.ui.trips
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

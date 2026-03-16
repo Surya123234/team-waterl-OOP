@@ -67,8 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.waterloop.data.model.Marker as DbMarker
-import com.example.waterloop.ui.markers.MarkerPhotoViewModel
+import com.example.waterloop.ui.trips.MarkerPhotoViewModel
 import com.example.waterloop.ui.trips.MarkerViewModel
 import com.example.waterloop.ui.trips.TripViewModel
 import com.mapbox.maps.plugin.PuckBearing

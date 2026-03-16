@@ -23,8 +23,8 @@ data class Trip (
     @SerialName("end_date")
     val endDate: String? = null,
 
-    @SerialName("cover_url")
-    val coverUrl: String? = null,
+    @SerialName("cover_image_url")
+    val coverImageUrl: String? = null,
 
     @SerialName("status")
     val status: String = "active"
