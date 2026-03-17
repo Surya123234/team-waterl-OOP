@@ -27,6 +27,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -35,6 +40,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -80,6 +86,11 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
@@ -175,6 +186,7 @@ fun TripScreen(
     var markerDescription by remember { mutableStateOf("") }
     var markerCategory by remember { mutableStateOf("") }
     var markerNotes by remember { mutableStateOf("") }
+    var fullscreenPhotoIndex by remember { mutableStateOf(-1) }
 
     // Local error message state for the dialog
     var markerDialogError by remember { mutableStateOf<String?>(null) }
@@ -743,7 +755,15 @@ fun TripScreen(
                                 AsyncImage(
                                     model = photo.photoUrl,
                                     contentDescription = "Marker photo",
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .pointerInput(photo.photoUrl) {
+                                            detectTapGestures(
+                                                onTap = {
+                                                    fullscreenPhotoIndex = photos.indexOf(photo)
+                                                }
+                                            )
+                                        },
                                     contentScale = ContentScale.Crop
                                 )
                                 // Delete Photo Button (Dustbin)
@@ -771,7 +791,7 @@ fun TripScreen(
                     }
                 } else {
                     Image(
-                        painter = painterResource(id = R.drawable.google_stock),
+                        painter = painterResource(id = R.drawable.google_stock_marker),
                         contentDescription = "Placeholder",
                         modifier = Modifier
                             .fillMaxWidth()
@@ -918,6 +938,75 @@ fun TripScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
+    }
+
+    // Fullscreen Photo Viewer
+    if (fullscreenPhotoIndex >= 0 && photos.isNotEmpty()) {
+        Dialog(
+            onDismissRequest = { fullscreenPhotoIndex = -1 },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(0.dp))
+                    .background(Color.Black)
+            ) {
+                val pagerState = rememberPagerState(
+                    initialPage = fullscreenPhotoIndex,
+                    pageCount = { photos.size }
+                )
+
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    AsyncImage(
+                        model = photos[page].photoUrl,
+                        contentDescription = "Photo ${page + 1}",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onDoubleTap = { fullscreenPhotoIndex = -1 }
+                                )
+                            },
+                        contentScale = ContentScale.Fit
+                    )
+                }
+
+                // Close button
+                IconButton(
+                    onClick = { fullscreenPhotoIndex = -1 },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        .size(40.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color.White
+                    )
+                }
+
+                // Photo counter
+                Text(
+                    text = "${pagerState.currentPage + 1} / ${photos.size}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 32.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
             }
         }
     }

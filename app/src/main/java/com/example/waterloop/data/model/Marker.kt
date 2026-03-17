@@ -1,5 +1,6 @@
 package com.example.waterloop.data.model
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -29,6 +30,7 @@ data class Marker(
     @SerialName("longitude")
     val longitude: Double,
 
+    @EncodeDefault
     @SerialName("visited")
     val visited: Boolean = false
 )

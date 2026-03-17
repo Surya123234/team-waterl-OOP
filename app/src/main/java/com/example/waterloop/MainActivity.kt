@@ -6,9 +6,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+
 import android.net.Uri
 import coil.compose.AsyncImage
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
@@ -56,6 +61,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -223,7 +229,7 @@ fun MainScreen(navController: NavController) {
                                 )
                             } else {
                                 Image(
-                                    painter = painterResource(id = R.drawable.toronto),
+                                    painter = painterResource(id = R.drawable.google_stock_location),
                                     contentDescription = trip.title,
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop
@@ -233,6 +239,15 @@ fun MainScreen(navController: NavController) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.Transparent,
+                                                Color.Black.copy(alpha = 0.7f)
+                                            ),
+                                            startY = 100f
+                                        )
+                                    )
                                     .padding(16.dp),
                                 contentAlignment = Alignment.BottomStart
                             ) {
@@ -272,21 +287,30 @@ fun MainScreen(navController: NavController) {
                                         tripStartDate = trip.startDate ?: ""
                                         tripEndDate = trip.endDate ?: ""
                                         selectedCoverImageUri = null
-                                    }
+                                    },
+                                    modifier = Modifier
+                                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                                        .size(36.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Edit,
                                         contentDescription = "Edit trip",
-                                        tint = Color.White
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
+                                Spacer(modifier = Modifier.width(8.dp))
                                 IconButton(
-                                    onClick = { tripToDelete = trip }
+                                    onClick = { tripToDelete = trip },
+                                    modifier = Modifier
+                                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                                        .size(36.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
                                         contentDescription = "Delete trip",
-                                        tint = Color.White
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
