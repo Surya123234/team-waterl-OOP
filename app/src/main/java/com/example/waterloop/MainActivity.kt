@@ -8,7 +8,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import coil.compose.AsyncImage
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -37,6 +36,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -54,6 +54,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -110,11 +111,10 @@ fun MainScreen(navController: NavController) {
     val tripCreationMessage by viewModel.tripCreationMessage.collectAsState()
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    
+
     var tripToDelete by remember { mutableStateOf<Trip?>(null) }
     var tripToEdit by remember { mutableStateOf<Trip?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
-    var tripForCoverImage by remember { mutableStateOf<Trip?>(null) }
 
     // Dialog state
     var tripTitle by remember { mutableStateOf("") }
@@ -122,41 +122,23 @@ fun MainScreen(navController: NavController) {
     var tripStartDate by remember { mutableStateOf("") }
     var tripEndDate by remember { mutableStateOf("") }
 
+    // Cover image state for dialogs
+    var selectedCoverImageUri by remember { mutableStateOf<Uri?>(null) }
+
     // Date Picker state
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
-    
+
     val datePickerStateStart = rememberDatePickerState()
     val datePickerStateEnd = rememberDatePickerState()
-    
+
     val dateFormatter = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).apply { timeZone = TimeZone.getTimeZone("UTC") } }
 
-    // Image picker launcher for trip cover images
+    // Image picker launcher — just stores the URI for preview, doesn't upload yet
     val coverImagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let {
-            coroutineScope.launch {
-                try {
-                    val trip = tripForCoverImage ?: return@launch
-                    val tripId = trip.id ?: return@launch
-                    val inputStream = context.contentResolver.openInputStream(uri)
-                    val bytes = inputStream?.readBytes() ?: return@launch
-                    val fileName = "cover_${System.currentTimeMillis()}.jpg"
-
-                    val success = viewModel.uploadTripCoverImage(tripId, fileName, bytes)
-                    if (success) {
-                        snackbarHostState.showSnackbar("Cover image updated!")
-                    } else {
-                        snackbarHostState.showSnackbar("Failed to upload cover image")
-                    }
-                } catch (e: Exception) {
-                    snackbarHostState.showSnackbar("Failed to upload cover image")
-                } finally {
-                    tripForCoverImage = null
-                }
-            }
-        }
+        uri?.let { selectedCoverImageUri = it }
     }
 
     LaunchedEffect(Unit) {
@@ -187,6 +169,7 @@ fun MainScreen(navController: NavController) {
                     .height(200.dp)
                     .clickable {
                         tripTitle = ""; tripCity = ""; tripStartDate = ""; tripEndDate = ""
+                        selectedCoverImageUri = null
                         showCreateDialog = true
                     },
                 shape = RoundedCornerShape(16.dp),
@@ -275,7 +258,7 @@ fun MainScreen(navController: NavController) {
                                     }
                                 }
                             }
-                            // Action Icons (Edit and Delete)
+                            // Action Icons (Edit and Delete only)
                             Row(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
@@ -283,23 +266,12 @@ fun MainScreen(navController: NavController) {
                             ) {
                                 IconButton(
                                     onClick = {
-                                        tripForCoverImage = trip
-                                        coverImagePickerLauncher.launch("image/*")
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Change cover image",
-                                        tint = Color.White
-                                    )
-                                }
-                                IconButton(
-                                    onClick = {
                                         tripToEdit = trip
                                         tripTitle = trip.title
                                         tripCity = trip.city ?: ""
                                         tripStartDate = trip.startDate ?: ""
                                         tripEndDate = trip.endDate ?: ""
+                                        selectedCoverImageUri = null
                                     }
                                 ) {
                                     Icon(
@@ -328,20 +300,23 @@ fun MainScreen(navController: NavController) {
     // Create Trip Dialog
     if (showCreateDialog) {
         AlertDialog(
-            onDismissRequest = { showCreateDialog = false },
+            onDismissRequest = {
+                showCreateDialog = false
+                selectedCoverImageUri = null
+            },
             title = { Text("Plan a New Journey") },
             text = {
                 Column {
                     OutlinedTextField(
-                        value = tripTitle, 
-                        onValueChange = { tripTitle = it }, 
+                        value = tripTitle,
+                        onValueChange = { tripTitle = it },
                         label = { Text("Trip Name") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = tripCity, 
-                        onValueChange = { tripCity = it }, 
+                        value = tripCity,
+                        onValueChange = { tripCity = it },
                         label = { Text("City") },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -373,35 +348,100 @@ fun MainScreen(navController: NavController) {
                             }
                         )
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Cover Image Picker
+                    Text(
+                        text = "Cover Image",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    if (selectedCoverImageUri != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { coverImagePickerLauncher.launch("image/*") }
+                        ) {
+                            AsyncImage(
+                                model = selectedCoverImageUri,
+                                contentDescription = "Selected cover image",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        TextButton(
+                            onClick = { selectedCoverImageUri = null },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Remove")
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { coverImagePickerLauncher.launch("image/*") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Choose Cover Image")
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(onClick = {
-                    viewModel.createTrip(tripTitle, tripCity, tripStartDate, tripEndDate)
-                    showCreateDialog = false
+                    coroutineScope.launch {
+                        // Create the trip first
+                        val newTrip = viewModel.createTripAndReturn(tripTitle, tripCity, tripStartDate, tripEndDate)
+                        if (newTrip?.id != null && selectedCoverImageUri != null) {
+                            // Upload cover image with the new trip's ID
+                            try {
+                                val inputStream = context.contentResolver.openInputStream(selectedCoverImageUri!!)
+                                val bytes = inputStream?.readBytes()
+                                if (bytes != null) {
+                                    val fileName = "cover_${System.currentTimeMillis()}.jpg"
+                                    viewModel.uploadTripCoverImage(newTrip.id, fileName, bytes)
+                                }
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("Trip created, but cover image upload failed")
+                            }
+                        }
+                        selectedCoverImageUri = null
+                        showCreateDialog = false
+                    }
                 }) { Text("Create") }
             },
-            dismissButton = { TextButton(onClick = { showCreateDialog = false }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = {
+                    showCreateDialog = false
+                    selectedCoverImageUri = null
+                }) { Text("Cancel") }
+            }
         )
     }
 
     // Edit Trip Dialog
     tripToEdit?.let { trip ->
         AlertDialog(
-            onDismissRequest = { tripToEdit = null },
+            onDismissRequest = {
+                tripToEdit = null
+                selectedCoverImageUri = null
+            },
             title = { Text("Edit Trip Details") },
             text = {
                 Column {
                     OutlinedTextField(
-                        value = tripTitle, 
-                        onValueChange = { tripTitle = it }, 
+                        value = tripTitle,
+                        onValueChange = { tripTitle = it },
                         label = { Text("Trip Name") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = tripCity, 
-                        onValueChange = { tripCity = it }, 
+                        value = tripCity,
+                        onValueChange = { tripCity = it },
                         label = { Text("City") },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -433,20 +473,106 @@ fun MainScreen(navController: NavController) {
                             }
                         )
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Cover Image Picker
+                    Text(
+                        text = "Cover Image",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    if (selectedCoverImageUri != null) {
+                        // User picked a new image
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { coverImagePickerLauncher.launch("image/*") }
+                        ) {
+                            AsyncImage(
+                                model = selectedCoverImageUri,
+                                contentDescription = "Selected cover image",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        TextButton(
+                            onClick = { selectedCoverImageUri = null },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Remove")
+                        }
+                    } else if (!trip.coverImageUrl.isNullOrBlank()) {
+                        // Show existing cover image
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { coverImagePickerLauncher.launch("image/*") }
+                        ) {
+                            AsyncImage(
+                                model = trip.coverImageUrl,
+                                contentDescription = "Current cover image",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        TextButton(
+                            onClick = { coverImagePickerLauncher.launch("image/*") },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Change")
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { coverImagePickerLauncher.launch("image/*") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Choose Cover Image")
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(onClick = {
-                    viewModel.updateTrip(trip.copy(
-                        title = tripTitle,
-                        city = tripCity,
-                        startDate = tripStartDate,
-                        endDate = tripEndDate
-                    ))
-                    tripToEdit = null
+                    coroutineScope.launch {
+                        // Upload new cover image if one was selected
+                        if (selectedCoverImageUri != null && trip.id != null) {
+                            try {
+                                val inputStream = context.contentResolver.openInputStream(selectedCoverImageUri!!)
+                                val bytes = inputStream?.readBytes()
+                                if (bytes != null) {
+                                    val fileName = "cover_${System.currentTimeMillis()}.jpg"
+                                    viewModel.uploadTripCoverImage(trip.id, fileName, bytes)
+                                }
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("Failed to upload cover image")
+                            }
+                        }
+                        // Update trip details
+                        viewModel.updateTrip(trip.copy(
+                            title = tripTitle,
+                            city = tripCity,
+                            startDate = tripStartDate,
+                            endDate = tripEndDate
+                        ))
+                        selectedCoverImageUri = null
+                        tripToEdit = null
+                    }
                 }) { Text("Save Changes") }
             },
-            dismissButton = { TextButton(onClick = { tripToEdit = null }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = {
+                    tripToEdit = null
+                    selectedCoverImageUri = null
+                }) { Text("Cancel") }
+            }
         )
     }
 

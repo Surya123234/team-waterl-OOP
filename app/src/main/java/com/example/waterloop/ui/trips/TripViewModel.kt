@@ -77,7 +77,16 @@ class TripViewModel : ViewModel() {
             _selectedTrip.value = repository.getTripById(tripId)
         }
     }
-
+    suspend fun createTripAndReturn(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
+        val newTrip = repository.createTrip(title, city, startDate, endDate)
+        if (newTrip != null) {
+            _tripCreationMessage.value = "Trip created successfully"
+            loadTrips()
+        } else {
+            _tripCreationMessage.value = "Failed to create trip"
+        }
+        return newTrip
+    }
     suspend fun uploadTripCoverImage(tripId: String, fileName: String, bytes: ByteArray): Boolean {
         val url = repository.uploadTripCoverImage(tripId, fileName, bytes)
         if (url != null) {

@@ -10,6 +10,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,30 +18,42 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -59,10 +72,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -85,6 +101,7 @@ import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
@@ -93,6 +110,7 @@ import kotlinx.serialization.json.Json
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
+// Geocode response models (used by marker creation dialog)
 @Serializable
 data class GeocodeResponse(
     val results: List<GeocodeResult>? = null
@@ -112,6 +130,24 @@ data class GeocodeRank(
     val matchType: String? = null
 )
 
+// Autocomplete response models
+@Serializable
+data class AutocompleteResponse(
+    val results: List<AutocompleteResult>? = null
+)
+
+@Serializable
+data class AutocompleteResult(
+    val formatted: String? = null,
+    val name: String? = null,
+    val lat: Double,
+    val lon: Double,
+    @SerialName("address_line1")
+    val addressLine1: String? = null,
+    @SerialName("address_line2")
+    val addressLine2: String? = null
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TripScreen(
@@ -122,6 +158,7 @@ fun TripScreen(
     photoViewModel: MarkerPhotoViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val selectedTrip by tripViewModel.selectedTrip.collectAsState()
@@ -132,13 +169,13 @@ fun TripScreen(
     var showMap by remember { mutableStateOf(false) }
     var showRequestPermissionButton by remember { mutableStateOf(false) }
     var showMarkerDialog by remember { mutableStateOf(false) }
-    
+
     // Form fields for marker creation
     var markerTitle by remember { mutableStateOf("") }
     var markerDescription by remember { mutableStateOf("") }
     var markerCategory by remember { mutableStateOf("") }
     var markerNotes by remember { mutableStateOf("") }
-    
+
     // Local error message state for the dialog
     var markerDialogError by remember { mutableStateOf<String?>(null) }
 
@@ -146,7 +183,7 @@ fun TripScreen(
     var showMarkerSheet by remember { mutableStateOf(false) }
     var showAllMarkersSheet by remember { mutableStateOf(false) }
     var showEditMarkerDialog by remember { mutableStateOf(false) }
-    
+
     // Derived state: Get the latest marker data from the list
     val selectedMarker = remember(markers, selectedMarkerId) {
         markers.find { it.id == selectedMarkerId }
@@ -159,10 +196,15 @@ fun TripScreen(
     var editMarkerNotes by remember { mutableStateOf("") }
 
     var longPressedPoint by remember { mutableStateOf<Point?>(null) }
-    
+
+    // Search bar state
+    var searchQuery by remember { mutableStateOf("") }
+    var autocompleteSuggestions by remember { mutableStateOf<List<AutocompleteResult>>(emptyList()) }
+    var showSuggestions by remember { mutableStateOf(false) }
+
     val markerSheetState = rememberModalBottomSheetState()
     val allMarkersSheetState = rememberModalBottomSheetState()
-    
+
     val httpClient = remember {
         HttpClient(Android) {
             install(ContentNegotiation) {
@@ -172,6 +214,27 @@ fun TripScreen(
                     isLenient = true
                 })
             }
+        }
+    }
+
+    // Debounced autocomplete search
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.length < 3) {
+            autocompleteSuggestions = emptyList()
+            showSuggestions = false
+            return@LaunchedEffect
+        }
+        delay(300) // debounce 300ms
+        try {
+            val encoded = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8.toString())
+            val response = httpClient.get(
+                "https://api.geoapify.com/v1/geocode/autocomplete?text=$encoded&limit=5&format=json&apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
+            ).body<AutocompleteResponse>()
+            autocompleteSuggestions = response.results ?: emptyList()
+            showSuggestions = autocompleteSuggestions.isNotEmpty()
+        } catch (e: Exception) {
+            autocompleteSuggestions = emptyList()
+            showSuggestions = false
         }
     }
 
@@ -186,7 +249,7 @@ fun TripScreen(
                     val inputStream = context.contentResolver.openInputStream(uri)
                     val bytes = inputStream?.readBytes() ?: return@launch
                     val fileName = "photo_${System.currentTimeMillis()}.jpg"
-                    
+
                     photoViewModel.uploadAndCreateMarkerPhoto(markerId, fileName, bytes)
                     snackbarHostState.showSnackbar("Photo uploaded successfully")
                 } catch (e: Exception) {
@@ -226,20 +289,16 @@ fun TripScreen(
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                },
-                actions = {
-                    IconButton(onClick = { showMarkerDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Marker")
-                    }
                 }
             )
         },
         floatingActionButton = {
             if (mapViewportState.mapViewportStatus == ViewportStatus.Idle) {
-                FloatingActionButton(
+                SmallFloatingActionButton(
                     onClick = {
                         mapViewportState.transitionToFollowPuckState()
-                    }
+                    },
+                    modifier = Modifier.padding(bottom = 8.dp)
                 ) {
                     Image(
                         painter = painterResource(id = android.R.drawable.ic_menu_mylocation),
@@ -275,6 +334,14 @@ fun TripScreen(
                             longPressedPoint = point
                             showMarkerDialog = true
                             true
+                        },
+                        onMapClickListener = {
+                            // Dismiss suggestions when tapping the map
+                            if (showSuggestions) {
+                                showSuggestions = false
+                                focusManager.clearFocus()
+                            }
+                            false
                         }
                     ) {
                         markers.forEach { marker ->
@@ -297,11 +364,149 @@ fun TripScreen(
                             mapViewportState.transitionToFollowPuckState()
                         }
                     }
+
+                    // Search bar overlay on the map
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(horizontal = 16.dp, vertical = 30.dp)
+                            .fillMaxWidth()
+                    ) {
+                        // Search bar
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(28.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            TextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("Search places") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = "Search",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = {
+                                            searchQuery = ""
+                                            autocompleteSuggestions = emptyList()
+                                            showSuggestions = false
+                                            focusManager.clearFocus()
+                                        }) {
+                                            Icon(
+                                                Icons.Default.Clear,
+                                                contentDescription = "Clear",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    disabledIndicatorColor = Color.Transparent
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        // Suggestions dropdown
+                        if (showSuggestions && autocompleteSuggestions.isNotEmpty()) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp)
+                                    .heightIn(max = 300.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                )
+                            ) {
+                                Column {
+                                    autocompleteSuggestions.forEachIndexed { index, suggestion ->
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    // Move camera to selected location
+                                                    mapViewportState.setCameraOptions {
+                                                        center(
+                                                            Point.fromLngLat(
+                                                                suggestion.lon,
+                                                                suggestion.lat
+                                                            )
+                                                        )
+                                                        zoom(16.0)
+                                                    }
+                                                    // Pre-fill marker dialog
+                                                    val title = suggestion.name
+                                                        ?: suggestion.addressLine1
+                                                        ?: suggestion.formatted
+                                                        ?: "Unknown"
+                                                    markerTitle = title
+                                                    markerDescription = ""
+                                                    markerCategory = ""
+                                                    markerNotes = ""
+                                                    longPressedPoint = Point.fromLngLat(
+                                                        suggestion.lon,
+                                                        suggestion.lat
+                                                    )
+                                                    showMarkerDialog = true
+
+                                                    // Clear search
+                                                    searchQuery = ""
+                                                    autocompleteSuggestions = emptyList()
+                                                    showSuggestions = false
+                                                    focusManager.clearFocus()
+                                                }
+                                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                        ) {
+                                            Text(
+                                                text = suggestion.addressLine1
+                                                    ?: suggestion.name
+                                                    ?: "Unknown",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            if (!suggestion.addressLine2.isNullOrBlank()) {
+                                                Text(
+                                                    text = suggestion.addressLine2,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                        if (index < autocompleteSuggestions.lastIndex) {
+                                            HorizontalDivider(
+                                                modifier = Modifier.padding(horizontal = 16.dp),
+                                                color = MaterialTheme.colorScheme.outlineVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Button(
                         onClick = { showAllMarkersSheet = true },
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(start = 16.dp, bottom = 16.dp)
+                            .padding(start = 16.dp, bottom = 24.dp)
                     ) {
                         Text("View All Markers")
                     }
@@ -374,7 +579,7 @@ fun TripScreen(
                         label = { Text("Notes") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    
+
                     if (markerDialogError != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -421,7 +626,7 @@ fun TripScreen(
                                     if (!response.results.isNullOrEmpty()) {
                                         val result = response.results[0]
                                         val confidence = result.rank?.confidence ?: 0.0
-                                        
+
                                         if (confidence >= 0.7) {
                                             markerViewModel.createMarker(
                                                 tripId = tripId,
@@ -456,7 +661,7 @@ fun TripScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { 
+                TextButton(onClick = {
                     showMarkerDialog = false
                     markerDialogError = null
                 }) { Text("Cancel") }
@@ -513,7 +718,7 @@ fun TripScreen(
                         Icon(Icons.Default.Delete, contentDescription = "Delete")
                     }
                 }
-                
+
                 if (!selectedMarker.description.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(text = selectedMarker.description.orEmpty(), style = MaterialTheme.typography.bodyMedium)
@@ -525,7 +730,7 @@ fun TripScreen(
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                
+
                 // Multiple Photo Display
                 if (photos.isNotEmpty()) {
                     LazyRow(modifier = Modifier.fillMaxWidth()) {
@@ -578,13 +783,13 @@ fun TripScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(modifier = Modifier.fillMaxWidth()) {
                     val isVisited = selectedMarker.visited
-                    
+
                     // Button Animations
                     val buttonColor by animateColorAsState(
                         targetValue = if (isVisited) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
                         label = "buttonColor"
                     )
-                    
+
                     var isPressed by remember { mutableStateOf(false) }
                     val buttonScale by animateFloatAsState(
                         targetValue = if (isPressed) 0.95f else 1f,
