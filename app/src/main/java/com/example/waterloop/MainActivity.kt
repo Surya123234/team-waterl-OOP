@@ -6,7 +6,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-
 import android.net.Uri
 import coil.compose.AsyncImage
 import androidx.compose.foundation.Image
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -417,20 +415,9 @@ fun MainScreen(navController: NavController) {
             confirmButton = {
                 Button(onClick = {
                     coroutineScope.launch {
-                        // Create the trip first
                         val newTrip = viewModel.createTripAndReturn(tripTitle, tripCity, tripStartDate, tripEndDate)
                         if (newTrip?.id != null && selectedCoverImageUri != null) {
-                            // Upload cover image with the new trip's ID
-                            try {
-                                val inputStream = context.contentResolver.openInputStream(selectedCoverImageUri!!)
-                                val bytes = inputStream?.readBytes()
-                                if (bytes != null) {
-                                    val fileName = "cover_${System.currentTimeMillis()}.jpg"
-                                    viewModel.uploadTripCoverImage(newTrip.id, fileName, bytes)
-                                }
-                            } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("Trip created, but cover image upload failed")
-                            }
+                            viewModel.uploadTripCoverImage(newTrip.id, selectedCoverImageUri!!, context.contentResolver)
                         }
                         selectedCoverImageUri = null
                         showCreateDialog = false
@@ -507,7 +494,6 @@ fun MainScreen(navController: NavController) {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     if (selectedCoverImageUri != null) {
-                        // User picked a new image
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -530,7 +516,6 @@ fun MainScreen(navController: NavController) {
                             Text("Remove")
                         }
                     } else if (!trip.coverImageUrl.isNullOrBlank()) {
-                        // Show existing cover image
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -566,20 +551,9 @@ fun MainScreen(navController: NavController) {
             confirmButton = {
                 Button(onClick = {
                     coroutineScope.launch {
-                        // Upload new cover image if one was selected
                         if (selectedCoverImageUri != null && trip.id != null) {
-                            try {
-                                val inputStream = context.contentResolver.openInputStream(selectedCoverImageUri!!)
-                                val bytes = inputStream?.readBytes()
-                                if (bytes != null) {
-                                    val fileName = "cover_${System.currentTimeMillis()}.jpg"
-                                    viewModel.uploadTripCoverImage(trip.id, fileName, bytes)
-                                }
-                            } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("Failed to upload cover image")
-                            }
+                            viewModel.uploadTripCoverImage(trip.id, selectedCoverImageUri!!, context.contentResolver)
                         }
-                        // Update trip details
                         viewModel.updateTrip(trip.copy(
                             title = tripTitle,
                             city = tripCity,

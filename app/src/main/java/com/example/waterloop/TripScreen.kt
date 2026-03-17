@@ -22,19 +22,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
@@ -47,14 +43,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -68,7 +62,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,7 +71,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -87,8 +79,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -106,58 +96,8 @@ import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportS
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.engine.android.Android
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.get
-import io.ktor.serialization.kotlinx.json.json
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
-
-// Geocode response models (used by marker creation dialog)
-@Serializable
-data class GeocodeResponse(
-    val results: List<GeocodeResult>? = null
-)
-
-@Serializable
-data class GeocodeResult(
-    val lon: Double,
-    val lat: Double,
-    val rank: GeocodeRank? = null
-)
-
-@Serializable
-data class GeocodeRank(
-    val confidence: Double? = null,
-    @SerialName("match_type")
-    val matchType: String? = null
-)
-
-// Autocomplete response models
-@Serializable
-data class AutocompleteResponse(
-    val results: List<AutocompleteResult>? = null
-)
-
-@Serializable
-data class AutocompleteResult(
-    val formatted: String? = null,
-    val name: String? = null,
-    val lat: Double,
-    val lon: Double,
-    @SerialName("address_line1")
-    val addressLine1: String? = null,
-    @SerialName("address_line2")
-    val addressLine2: String? = null
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -175,6 +115,7 @@ fun TripScreen(
     val selectedTrip by tripViewModel.selectedTrip.collectAsState()
     val markers by markerViewModel.markers.collectAsState()
     val photos by photoViewModel.markerPhotos.collectAsState()
+    val autocompleteSuggestions by markerViewModel.autocompleteSuggestions.collectAsState()
 
     var permissionRequestCount by remember { mutableStateOf(1) }
     var showMap by remember { mutableStateOf(false) }
@@ -211,62 +152,25 @@ fun TripScreen(
 
     // Search bar state
     var searchQuery by remember { mutableStateOf("") }
-    var autocompleteSuggestions by remember { mutableStateOf<List<AutocompleteResult>>(emptyList()) }
     var showSuggestions by remember { mutableStateOf(false) }
 
     val markerSheetState = rememberModalBottomSheetState()
     val allMarkersSheetState = rememberModalBottomSheetState()
 
-    val httpClient = remember {
-        HttpClient(Android) {
-            install(ContentNegotiation) {
-                json(Json {
-                    ignoreUnknownKeys = true
-                    coerceInputValues = true
-                    isLenient = true
-                })
-            }
-        }
+    // Show suggestions when ViewModel returns results
+    LaunchedEffect(autocompleteSuggestions) {
+        showSuggestions = autocompleteSuggestions.isNotEmpty()
     }
 
-    // Debounced autocomplete search
-    LaunchedEffect(searchQuery) {
-        if (searchQuery.length < 3) {
-            autocompleteSuggestions = emptyList()
-            showSuggestions = false
-            return@LaunchedEffect
-        }
-        delay(300) // debounce 300ms
-        try {
-            val encoded = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8.toString())
-            val response = httpClient.get(
-                "https://api.geoapify.com/v1/geocode/autocomplete?text=$encoded&limit=5&format=json&apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
-            ).body<AutocompleteResponse>()
-            autocompleteSuggestions = response.results ?: emptyList()
-            showSuggestions = autocompleteSuggestions.isNotEmpty()
-        } catch (e: Exception) {
-            autocompleteSuggestions = emptyList()
-            showSuggestions = false
-        }
-    }
-
-    // Image Picker Launcher
+    // Image Picker Launcher — delegates file I/O to ViewModel
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
+            val markerId = selectedMarkerId ?: return@let
+            photoViewModel.uploadMarkerPhoto(markerId, uri, context.contentResolver)
             scope.launch {
-                try {
-                    val markerId = selectedMarkerId ?: return@launch
-                    val inputStream = context.contentResolver.openInputStream(uri)
-                    val bytes = inputStream?.readBytes() ?: return@launch
-                    val fileName = "photo_${System.currentTimeMillis()}.jpg"
-
-                    photoViewModel.uploadAndCreateMarkerPhoto(markerId, fileName, bytes)
-                    snackbarHostState.showSnackbar("Photo uploaded successfully")
-                } catch (e: Exception) {
-                    snackbarHostState.showSnackbar("Failed to upload photo")
-                }
+                snackbarHostState.showSnackbar("Photo uploaded successfully")
             }
         }
     }
@@ -395,7 +299,10 @@ fun TripScreen(
                         ) {
                             TextField(
                                 value = searchQuery,
-                                onValueChange = { searchQuery = it },
+                                onValueChange = {
+                                    searchQuery = it
+                                    markerViewModel.searchPlaces(it)
+                                },
                                 placeholder = { Text("Search places") },
                                 leadingIcon = {
                                     Icon(
@@ -408,7 +315,7 @@ fun TripScreen(
                                     if (searchQuery.isNotEmpty()) {
                                         IconButton(onClick = {
                                             searchQuery = ""
-                                            autocompleteSuggestions = emptyList()
+                                            markerViewModel.clearSuggestions()
                                             showSuggestions = false
                                             focusManager.clearFocus()
                                         }) {
@@ -478,7 +385,7 @@ fun TripScreen(
 
                                                     // Clear search
                                                     searchQuery = ""
-                                                    autocompleteSuggestions = emptyList()
+                                                    markerViewModel.clearSuggestions()
                                                     showSuggestions = false
                                                     focusManager.clearFocus()
                                                 }
@@ -624,43 +531,31 @@ fun TripScreen(
                                     longPressedPoint = null
                                     markerDialogError = null
                                 } else {
-                                    val sanitizedText = markerTitle.trim().lowercase()
-                                    if (sanitizedText.isEmpty()) {
+                                    if (markerTitle.isBlank()) {
                                         markerDialogError = "Please enter a location name"
                                         return@launch
                                     }
 
-                                    val encodedText = URLEncoder.encode(sanitizedText, StandardCharsets.UTF_8.toString())
-                                    val response = httpClient.get(
-                                        "https://api.geoapify.com/v1/geocode/search?text=${encodedText}&format=json&apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
-                                    ).body<GeocodeResponse>()
-
-                                    if (!response.results.isNullOrEmpty()) {
-                                        val result = response.results[0]
-                                        val confidence = result.rank?.confidence ?: 0.0
-
-                                        if (confidence >= 0.7) {
-                                            markerViewModel.createMarker(
-                                                tripId = tripId,
-                                                title = markerTitle,
-                                                latitude = result.lat,
-                                                longitude = result.lon,
-                                                description = markerDescription,
-                                                category = markerCategory,
-                                                notes = markerNotes
-                                            )
-                                            mapViewportState.setCameraOptions {
-                                                center(Point.fromLngLat(result.lon, result.lat))
-                                                zoom(16.0)
-                                            }
-                                            showMarkerDialog = false
-                                            markerTitle = ""; markerDescription = ""; markerCategory = ""; markerNotes = ""
-                                            markerDialogError = null
-                                        } else {
-                                            markerDialogError = "Unable to find a precise location for '$markerTitle'. Please recheck the name."
+                                    val result = markerViewModel.geocodeLocation(markerTitle)
+                                    if (result != null) {
+                                        markerViewModel.createMarker(
+                                            tripId = tripId,
+                                            title = markerTitle,
+                                            latitude = result.lat,
+                                            longitude = result.lon,
+                                            description = markerDescription,
+                                            category = markerCategory,
+                                            notes = markerNotes
+                                        )
+                                        mapViewportState.setCameraOptions {
+                                            center(Point.fromLngLat(result.lon, result.lat))
+                                            zoom(16.0)
                                         }
+                                        showMarkerDialog = false
+                                        markerTitle = ""; markerDescription = ""; markerCategory = ""; markerNotes = ""
+                                        markerDialogError = null
                                     } else {
-                                        markerDialogError = "Location not found. Please try a different name."
+                                        markerDialogError = "Location not found or not precise enough. Please try a different name."
                                     }
                                 }
                             } catch (e: Exception) {

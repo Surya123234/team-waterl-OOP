@@ -1,5 +1,7 @@
 package com.example.waterloop.ui.trips
 
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.waterloop.data.model.Trip
@@ -37,6 +39,17 @@ class TripViewModel : ViewModel() {
                 _tripCreationMessage.value = "Failed to create trip"
             }
         }
+    }
+
+    suspend fun createTripAndReturn(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
+        val newTrip = repository.createTrip(title, city, startDate, endDate)
+        if (newTrip != null) {
+            _tripCreationMessage.value = "Trip created successfully"
+            loadTrips()
+        } else {
+            _tripCreationMessage.value = "Failed to create trip"
+        }
+        return newTrip
     }
 
     fun updateTrip(trip: Trip) {
@@ -77,22 +90,22 @@ class TripViewModel : ViewModel() {
             _selectedTrip.value = repository.getTripById(tripId)
         }
     }
-    suspend fun createTripAndReturn(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
-        val newTrip = repository.createTrip(title, city, startDate, endDate)
-        if (newTrip != null) {
-            _tripCreationMessage.value = "Trip created successfully"
-            loadTrips()
-        } else {
-            _tripCreationMessage.value = "Failed to create trip"
+
+    suspend fun uploadTripCoverImage(tripId: String, uri: Uri, contentResolver: ContentResolver): Boolean {
+        return try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val bytes = inputStream?.readBytes() ?: return false
+            val fileName = "cover_${System.currentTimeMillis()}.jpg"
+            val url = repository.uploadTripCoverImage(tripId, fileName, bytes)
+            if (url != null) {
+                loadTrips()
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
         }
-        return newTrip
-    }
-    suspend fun uploadTripCoverImage(tripId: String, fileName: String, bytes: ByteArray): Boolean {
-        val url = repository.uploadTripCoverImage(tripId, fileName, bytes)
-        if (url != null) {
-            loadTrips()
-            return true
-        }
-        return false
     }
 }
