@@ -5,6 +5,7 @@ import com.example.waterloop.data.model.TripMember
 import com.example.waterloop.data.remote.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.storage.storage
+import android.util.Log
 
 class TripRepository {
 
@@ -13,7 +14,8 @@ class TripRepository {
     private val authRepository = AuthRepository()
 
     suspend fun createTrip(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
-        val userId = authRepository.getCurrentUserId() ?: return null
+        val userId = "20f5fdd5-97b5-4ced-8d56-1f5d93c8e716"
+
         val trip = Trip(
             ownerId = userId,
             title = title,
