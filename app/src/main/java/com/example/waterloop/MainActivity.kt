@@ -72,8 +72,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.waterloop.ui.theme.WaterlOOPTheme
+import com.example.waterloop.ui.theme.WaterloopBlue
+import com.example.waterloop.ui.theme.WaterloopGold
+import com.example.waterloop.ui.theme.WaterloopDarkBackground
 import com.example.waterloop.data.model.Trip
 import com.example.waterloop.ui.trips.TripViewModel
+import com.example.waterloop.ui.trips.AuthViewModel
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.text.font.FontFamily
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -87,9 +93,33 @@ class MainActivity : ComponentActivity() {
         setContent {
             WaterlOOPTheme(darkTheme = true) {
                 val navController = rememberNavController()
-                NavHost(navController = navController, startDestination = "main") {
+                val authViewModel: AuthViewModel = viewModel()
+                val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+
+                // react to auth state changes and navigate accordingly.
+                // popUpTo clears the back stack so the user can't press back to loading/auth.
+                LaunchedEffect(isLoggedIn) {
+                    when (isLoggedIn) {
+                        true -> navController.navigate("main") {
+                            popUpTo("loading") { inclusive = true }
+                        }
+                        false -> navController.navigate("auth") {
+                            popUpTo("loading") { inclusive = true }
+                        }
+                        null -> { /* still checking session, stay on loading screen */ }
+                    }
+                }
+
+                // app always starts on loading while we check auth state
+                NavHost(navController = navController, startDestination = "loading") {
+                    composable("loading") {
+                        LoadingScreen()
+                    }
+                    composable("auth") {
+                        AuthScreen(authViewModel = authViewModel)
+                    }
                     composable("main") {
-                        MainScreen(navController = navController)
+                        MainScreen(navController = navController, authViewModel = authViewModel)
                     }
                     composable("map") {
                         MapScreen(navController = navController)
@@ -108,7 +138,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(navController: NavController) {
+fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
     val viewModel: TripViewModel = viewModel()
     val snackbarHostState = remember { SnackbarHostState() }
     val trips by viewModel.trips.collectAsState()
@@ -166,6 +196,30 @@ fun MainScreen(navController: NavController) {
                 .padding(padding)
                 .padding(16.dp)
         ) {
+            // user info row — email on the left, sign out on the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = authViewModel.getCurrentUserEmail() ?: "",
+                    fontSize = 13.sp,
+                    color = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = {
+                    authViewModel.signOut()
+                }) {
+                    Text(
+                        text = "Sign Out",
+                        color = WaterloopBlue,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Create Trip Header Card
             Card(
                 modifier = Modifier
@@ -628,5 +682,43 @@ fun MainScreen(navController: NavController) {
             },
             dismissButton = { TextButton(onClick = { tripToDelete = null }) { Text("Cancel") } }
         )
+    }
+}
+
+// shown briefly on startup while we check if the user already has a session
+@Composable
+fun LoadingScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(WaterloopDarkBackground),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "waterlOOP",
+                fontSize = 48.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Serif,
+                color = WaterloopBlue,
+                letterSpacing = 2.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Interactive Travel Map Planner",
+                fontSize = 16.sp,
+                color = Color.White.copy(alpha = 0.8f)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "CS 446 · Team WaterlOOP",
+                fontSize = 12.sp,
+                color = WaterloopGold.copy(alpha = 0.8f)
+            )
+            Spacer(modifier = Modifier.height(48.dp))
+            CircularProgressIndicator(color = WaterloopBlue)
+        }
     }
 }
