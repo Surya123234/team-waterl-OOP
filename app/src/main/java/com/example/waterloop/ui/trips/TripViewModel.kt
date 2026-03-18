@@ -1,5 +1,7 @@
 package com.example.waterloop.ui.trips
 
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.waterloop.data.model.Trip
@@ -27,14 +29,37 @@ class TripViewModel : ViewModel() {
         }
     }
 
-    fun createTrip(title: String, city: String?) {
+    fun createTrip(title: String, city: String?, startDate: String?, endDate: String?) {
         viewModelScope.launch {
-            val newTrip = repository.createTrip(title, city)
+            val newTrip = repository.createTrip(title, city, startDate, endDate)
             if (newTrip != null) {
                 _tripCreationMessage.value = "Trip created successfully"
                 loadTrips()
             } else {
                 _tripCreationMessage.value = "Failed to create trip"
+            }
+        }
+    }
+
+    suspend fun createTripAndReturn(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
+        val newTrip = repository.createTrip(title, city, startDate, endDate)
+        if (newTrip != null) {
+            _tripCreationMessage.value = "Trip created successfully"
+            loadTrips()
+        } else {
+            _tripCreationMessage.value = "Failed to create trip"
+        }
+        return newTrip
+    }
+
+    fun updateTrip(trip: Trip) {
+        viewModelScope.launch {
+            val updated = repository.updateTrip(trip)
+            if (updated != null) {
+                _tripCreationMessage.value = "Trip updated successfully"
+                loadTrips()
+            } else {
+                _tripCreationMessage.value = "Failed to update trip"
             }
         }
     }
@@ -63,6 +88,24 @@ class TripViewModel : ViewModel() {
     fun loadTripById(tripId: String) {
         viewModelScope.launch {
             _selectedTrip.value = repository.getTripById(tripId)
+        }
+    }
+
+    suspend fun uploadTripCoverImage(tripId: String, uri: Uri, contentResolver: ContentResolver): Boolean {
+        return try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val bytes = inputStream?.readBytes() ?: return false
+            val fileName = "cover_${System.currentTimeMillis()}.jpg"
+            val url = repository.uploadTripCoverImage(tripId, fileName, bytes)
+            if (url != null) {
+                loadTrips()
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
         }
     }
 }

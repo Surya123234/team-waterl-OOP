@@ -1,58 +1,136 @@
 package com.example.waterloop.ui.trips
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.waterloop.BuildConfig
+import com.example.waterloop.data.model.AutocompleteResponse
+import com.example.waterloop.data.model.AutocompleteResult
+import com.example.waterloop.data.model.GeocodeResponse
+import com.example.waterloop.data.model.GeocodeResult
 import com.example.waterloop.data.model.Marker
 import com.example.waterloop.data.repository.MarkerRepository
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.get
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
-    class MarkerViewModel : ViewModel() {
+class MarkerViewModel : ViewModel() {
 
-        private val repository = MarkerRepository()
+    private val repository = MarkerRepository()
 
-        private val _markers = MutableStateFlow<List<Marker>>(emptyList())
-        val markers: StateFlow<List<Marker>> = _markers
+    private val _markers = MutableStateFlow<List<Marker>>(emptyList())
+    val markers: StateFlow<List<Marker>> = _markers
 
-        fun loadMarkers(tripId: String) {
-            viewModelScope.launch {
-                _markers.value = repository.getMarkers(tripId)
-            }
+    private val _autocompleteSuggestions = MutableStateFlow<List<AutocompleteResult>>(emptyList())
+    val autocompleteSuggestions: StateFlow<List<AutocompleteResult>> = _autocompleteSuggestions
+
+    private var searchJob: Job? = null
+
+    private val httpClient = HttpClient(Android) {
+        install(ContentNegotiation) {
+            json(Json {
+                ignoreUnknownKeys = true
+                coerceInputValues = true
+                isLenient = true
+            })
         }
+    }
 
-        fun createMarker(tripId: String) {
-            viewModelScope.launch {
+    fun loadMarkers(tripId: String) {
+        viewModelScope.launch {
+            _markers.value = repository.getMarkers(tripId)
+        }
+    }
 
-                repository.createMarker(
-                    tripId = tripId,
-                    title = "Test Marker",
-                    latitude = 43.45,
-                    longitude = -80.49,
-                )
-            }
+    fun createMarker(
+        tripId: String,
+        title: String,
+        latitude: Double,
+        longitude: Double,
+        description: String? = null,
+        category: String? = null,
+        notes: String? = null
+    ) {
+        viewModelScope.launch {
+            repository.createMarker(
+                tripId = tripId,
+                title = title,
+                latitude = latitude,
+                longitude = longitude,
+                description = description,
+                category = category,
+                notes = notes
+            )
+            loadMarkers(tripId)
         }
-        //hardcoded to udpate the first marker in the database just to see if it works
-        //User input based field updates will be added when the UI is added
-        fun updateFirstMarker(newTitle: String) {
-            viewModelScope.launch {
-                if (_markers.value.isNotEmpty()) {
-                    val marker = _markers.value.first().copy(title = newTitle)
-                    repository.updateMarker(marker)
-                    // Reload markers to see changes
-                    loadMarkers(marker.tripId)
-                }
-            }
+    }
+
+    fun updateMarker(marker: Marker) {
+        viewModelScope.launch {
+            repository.updateMarker(marker)
+            loadMarkers(marker.tripId)
         }
-        //same as above, hardcoded to test deleting
-        fun deleteFirstMarker() {
-            viewModelScope.launch {
-                if (_markers.value.isNotEmpty()) {
-                    val markerId = _markers.value.first().id!!
-                    val tripId = _markers.value.first().tripId
-                    repository.deleteMarker(markerId)
-                    // Reload markers to reflect deletion
-                    loadMarkers(tripId)
-                }
+    }
+
+    fun deleteMarker(markerId: String, tripId: String) {
+        viewModelScope.launch {
+            repository.deleteMarker(markerId)
+            loadMarkers(tripId)
+        }
+    }
+
+    // Debounced autocomplete search
+    fun searchPlaces(query: String) {
+        searchJob?.cancel()
+        if (query.length < 3) {
+            _autocompleteSuggestions.value = emptyList()
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(300)
+            try {
+                val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.toString())
+                val response = httpClient.get(
+                    "https://api.geoapify.com/v1/geocode/autocomplete?text=$encoded&limit=5&format=json&apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
+                ).body<AutocompleteResponse>()
+                _autocompleteSuggestions.value = response.results ?: emptyList()
+            } catch (e: Exception) {
+                _autocompleteSuggestions.value = emptyList()
             }
         }
     }
+
+    fun clearSuggestions() {
+        searchJob?.cancel()
+        _autocompleteSuggestions.value = emptyList()
+    }
+
+    // Geocode a location name, returns result only if confidence >= 0.7
+    suspend fun geocodeLocation(text: String): GeocodeResult? {
+        return try {
+            val encoded = URLEncoder.encode(text.trim().lowercase(), StandardCharsets.UTF_8.toString())
+            val response = httpClient.get(
+                "https://api.geoapify.com/v1/geocode/search?text=$encoded&format=json&apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
+            ).body<GeocodeResponse>()
+            val result = response.results?.firstOrNull()
+            if (result != null && (result.rank?.confidence ?: 0.0) >= 0.7) result else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        httpClient.close()
+    }
+}

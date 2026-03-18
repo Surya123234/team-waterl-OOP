@@ -1,5 +1,7 @@
-package com.example.waterloop.ui.markers
+package com.example.waterloop.ui.trips
 
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.waterloop.data.model.MarkerPhoto
@@ -22,12 +24,19 @@ class MarkerPhotoViewModel : ViewModel() {
         }
     }
 
-    // Upload a photo and create a new MarkerPhoto
-    fun uploadAndCreateMarkerPhoto(markerId: String, fileName: String, fileBytes: ByteArray) {
+    // Upload a photo from a Uri and create a new MarkerPhoto
+    fun uploadMarkerPhoto(markerId: String, uri: Uri, contentResolver: ContentResolver) {
         viewModelScope.launch {
-            val newPhoto = repository.createMarkerPhotoWithUpload(markerId, fileName, fileBytes)
-            if (newPhoto != null) {
-                loadMarkerPhotos(markerId)
+            try {
+                val inputStream = contentResolver.openInputStream(uri)
+                val bytes = inputStream?.readBytes() ?: return@launch
+                val fileName = "photo_${System.currentTimeMillis()}.jpg"
+                val newPhoto = repository.createMarkerPhotoWithUpload(markerId, fileName, bytes)
+                if (newPhoto != null) {
+                    loadMarkerPhotos(markerId)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
