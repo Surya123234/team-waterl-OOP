@@ -7,6 +7,7 @@ import io.github.jan.supabase.exceptions.RestException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 // manages auth state for the ui. the ui observes the flows below and reacts to changes.
 // never calls the repository directly -- all auth logic goes through here.
@@ -36,6 +37,7 @@ class AuthViewModel : ViewModel() {
     private fun checkAuthState() {
         viewModelScope.launch {
             // DEBUGGING: Log.d("AuthViewModel", "checking auth state on startup")
+            delay(1000) // artificial delay to show the loading screen — remove before release
             _isLoggedIn.value = repository.isLoggedIn()
             // DEBUGGING: Log.d("AuthViewModel", "isLoggedIn = ${_isLoggedIn.value}")
         }
