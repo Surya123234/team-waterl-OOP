@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+/** UI model for displaying a trip member with their email and role. */
+data class TripMemberDisplay(val userId: String, val email: String?, val role: String)
+
 class TripViewModel : ViewModel() {
 
     private val repository = TripRepository()
@@ -22,6 +25,15 @@ class TripViewModel : ViewModel() {
 
     private val _selectedTrip = MutableStateFlow<Trip?>(null)
     val selectedTrip: StateFlow<Trip?> = _selectedTrip
+
+    private val _currentUserRole = MutableStateFlow<String?>(null)
+    val currentUserRole: StateFlow<String?> = _currentUserRole
+
+    private val _tripMembersDisplay = MutableStateFlow<List<TripMemberDisplay>>(emptyList())
+    val tripMembersDisplay: StateFlow<List<TripMemberDisplay>> = _tripMembersDisplay
+
+    private val _shareMessage = MutableStateFlow<String?>(null)
+    val shareMessage: StateFlow<String?> = _shareMessage
 
     fun loadTrips() {
         viewModelScope.launch {
@@ -89,6 +101,42 @@ class TripViewModel : ViewModel() {
         viewModelScope.launch {
             _selectedTrip.value = repository.getTripById(tripId)
         }
+    }
+
+    fun loadCurrentUserRole(tripId: String) {
+        viewModelScope.launch {
+            _currentUserRole.value = repository.getCurrentUserRole(tripId)
+        }
+    }
+
+    fun loadTripMembersDisplay(tripId: String) {
+        viewModelScope.launch {
+            val members = repository.getTripMembersWithEmails(tripId)
+            _tripMembersDisplay.value = members.map {
+                TripMemberDisplay(userId = it.userId, email = it.email, role = it.role)
+            }
+        }
+    }
+
+    fun inviteUser(tripId: String, email: String, role: String) {
+        viewModelScope.launch {
+            val userId = repository.getUserIdByEmail(email)
+            if (userId == null) {
+                _shareMessage.value = "No account found for $email"
+                return@launch
+            }
+            if (_tripMembersDisplay.value.any { it.userId == userId }) {
+                _shareMessage.value = "$email is already a member of this trip"
+                return@launch
+            }
+            val success = repository.addTripMember(tripId, userId, role)
+            _shareMessage.value = if (success) "Invited $email as $role" else "Failed to invite user"
+            if (success) loadTripMembersDisplay(tripId)
+        }
+    }
+
+    fun shareMessageShown() {
+        _shareMessage.value = null
     }
 
     suspend fun uploadTripCoverImage(tripId: String, uri: Uri, contentResolver: ContentResolver): Boolean {
