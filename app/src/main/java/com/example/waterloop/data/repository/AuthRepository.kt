@@ -33,4 +33,8 @@ class AuthRepository {
     suspend fun isLoggedIn(): Boolean {
         return client.auth.currentUserOrNull() != null
     }
+
+    fun getCurrentUserEmail(): String? {
+        return client.auth.currentUserOrNull()?.email
+    }
 }

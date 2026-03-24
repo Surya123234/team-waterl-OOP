@@ -14,7 +14,10 @@ class TripRepository {
     private val authRepository = AuthRepository()
 
     suspend fun createTrip(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
-        val userId = "20f5fdd5-97b5-4ced-8d56-1f5d93c8e716"
+        // owner_id is non-nullable in the db schema, so if there's no session we bail early
+        // rather than hitting a supabase constraint violation. in practice this shouldn't
+        // happen since navigation prevents reaching this screen without being logged in.
+        val userId = authRepository.getCurrentUserId() ?: return null
 
         val trip = Trip(
             ownerId = userId,
@@ -77,8 +80,25 @@ class TripRepository {
     }
 
     suspend fun getTrips(): List<Trip> {
+        // bail early if no session — shouldn't happen in normal flow but safe to guard
+        val userId = authRepository.getCurrentUserId() ?: return emptyList()
+
+        // get all trip ids this user is a member of
+        val memberTripIds = SupabaseClient.client.postgrest
+            .from("trip_members")
+            .select {
+                filter { eq("user_id", userId) }
+            }
+            .decodeList<TripMember>()
+            .map { it.tripId }
+
+        if (memberTripIds.isEmpty()) return emptyList()
+
+        // fetch only trips the user belongs to
         return client.from("trips")
-            .select()
+            .select {
+                filter { isIn("id", memberTripIds) }
+            }
             .decodeList()
     }
 
@@ -115,7 +135,6 @@ class TripRepository {
             val trip = getTripById(tripId) ?: return null
             val updatedTrip = trip.copy(coverImageUrl = publicUrl)
             updateTrip(updatedTrip)
-
             publicUrl
         } catch (e: Exception) {
             println("Upload failed: ${e.message}")
