@@ -31,12 +31,16 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -86,6 +90,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.waterloop.ui.trips.MarkerPhotoViewModel
 import com.example.waterloop.ui.trips.MarkerViewModel
+import com.example.waterloop.ui.trips.TripMemberDisplay
 import com.example.waterloop.ui.trips.TripViewModel
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.extension.compose.MapEffect
@@ -116,11 +121,19 @@ fun TripScreen(
     val markers by markerViewModel.markers.collectAsState()
     val photos by photoViewModel.markerPhotos.collectAsState()
     val autocompleteSuggestions by markerViewModel.autocompleteSuggestions.collectAsState()
+    val currentUserRole by tripViewModel.currentUserRole.collectAsState()
+    val tripMembersDisplay by tripViewModel.tripMembersDisplay.collectAsState()
+    val shareMessage by tripViewModel.shareMessage.collectAsState()
+    val canWrite = currentUserRole == "owner" || currentUserRole == "collaborator"
 
     var permissionRequestCount by remember { mutableStateOf(1) }
     var showMap by remember { mutableStateOf(false) }
     var showRequestPermissionButton by remember { mutableStateOf(false) }
     var showMarkerDialog by remember { mutableStateOf(false) }
+    var showShareSheet by remember { mutableStateOf(false) }
+    var inviteEmail by remember { mutableStateOf("") }
+    var selectedInviteRole by remember { mutableStateOf("collaborator") }
+    val shareSheetState = rememberModalBottomSheetState()
 
     // Form fields for marker creation
     var markerTitle by remember { mutableStateOf("") }
@@ -178,7 +191,16 @@ fun TripScreen(
     LaunchedEffect(tripId) {
         if (tripId != null) {
             tripViewModel.loadTripById(tripId)
+            tripViewModel.loadCurrentUserRole(tripId)
+            tripViewModel.loadTripMembersDisplay(tripId)
             markerViewModel.loadMarkers(tripId)
+        }
+    }
+
+    LaunchedEffect(shareMessage) {
+        shareMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            tripViewModel.shareMessageShown()
         }
     }
 
@@ -204,6 +226,13 @@ fun TripScreen(
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (currentUserRole == "owner") {
+                        IconButton(onClick = { showShareSheet = true }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share trip")
+                        }
                     }
                 }
             )
@@ -247,8 +276,14 @@ fun TripScreen(
                         Modifier.fillMaxSize(),
                         mapViewportState = mapViewportState,
                         onMapLongClickListener = { point ->
-                            longPressedPoint = point
-                            showMarkerDialog = true
+                            if (canWrite) {
+                                longPressedPoint = point
+                                showMarkerDialog = true
+                            } else {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("You have view-only access to this trip")
+                                }
+                            }
                             true
                         },
                         onMapClickListener = {
@@ -358,7 +393,7 @@ fun TripScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clickable {
-                                                    // Move camera to selected location
+                                                    // Always move camera to selected location
                                                     mapViewportState.setCameraOptions {
                                                         center(
                                                             Point.fromLngLat(
@@ -368,21 +403,22 @@ fun TripScreen(
                                                         )
                                                         zoom(16.0)
                                                     }
-                                                    // Pre-fill marker dialog
-                                                    val title = suggestion.name
-                                                        ?: suggestion.addressLine1
-                                                        ?: suggestion.formatted
-                                                        ?: "Unknown"
-                                                    markerTitle = title
-                                                    markerDescription = ""
-                                                    markerCategory = ""
-                                                    markerNotes = ""
-                                                    longPressedPoint = Point.fromLngLat(
-                                                        suggestion.lon,
-                                                        suggestion.lat
-                                                    )
-                                                    showMarkerDialog = true
-
+                                                    // Only open marker dialog if user can write
+                                                    if (canWrite) {
+                                                        val title = suggestion.name
+                                                            ?: suggestion.addressLine1
+                                                            ?: suggestion.formatted
+                                                            ?: "Unknown"
+                                                        markerTitle = title
+                                                        markerDescription = ""
+                                                        markerCategory = ""
+                                                        markerNotes = ""
+                                                        longPressedPoint = Point.fromLngLat(
+                                                            suggestion.lon,
+                                                            suggestion.lat
+                                                        )
+                                                        showMarkerDialog = true
+                                                    }
                                                     // Clear search
                                                     searchQuery = ""
                                                     markerViewModel.clearSuggestions()
@@ -606,23 +642,25 @@ fun TripScreen(
                             )
                         }
                     }
-                    IconButton(onClick = {
-                        editMarkerTitle = selectedMarker.title
-                        editMarkerDescription = selectedMarker.description.orEmpty()
-                        editMarkerCategory = selectedMarker.category.orEmpty()
-                        editMarkerNotes = selectedMarker.notes.orEmpty()
-                        showEditMarkerDialog = true
-                    }) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit")
-                    }
-                    IconButton(onClick = {
-                        if (selectedMarker.id != null && tripId != null) {
-                            markerViewModel.deleteMarker(selectedMarker.id, tripId)
+                    if (canWrite) {
+                        IconButton(onClick = {
+                            editMarkerTitle = selectedMarker.title
+                            editMarkerDescription = selectedMarker.description.orEmpty()
+                            editMarkerCategory = selectedMarker.category.orEmpty()
+                            editMarkerNotes = selectedMarker.notes.orEmpty()
+                            showEditMarkerDialog = true
+                        }) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit")
                         }
-                        showMarkerSheet = false
-                        selectedMarkerId = null
-                    }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete")
+                        IconButton(onClick = {
+                            if (selectedMarker.id != null && tripId != null) {
+                                markerViewModel.deleteMarker(selectedMarker.id, tripId)
+                            }
+                            showMarkerSheet = false
+                            selectedMarkerId = null
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete")
+                        }
                     }
                 }
 
@@ -661,25 +699,27 @@ fun TripScreen(
                                         },
                                     contentScale = ContentScale.Crop
                                 )
-                                // Delete Photo Button (Dustbin)
-                                IconButton(
-                                    onClick = {
-                                        photo.id?.let { id ->
-                                            photoViewModel.deleteMarkerPhoto(id, selectedMarker.id!!)
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(4.dp)
-                                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                                        .size(32.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Delete Photo",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                // Delete Photo Button — only visible to writers
+                                if (canWrite) {
+                                    IconButton(
+                                        onClick = {
+                                            photo.id?.let { id ->
+                                                photoViewModel.deleteMarkerPhoto(id, selectedMarker.id!!)
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(4.dp)
+                                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                            .size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete Photo",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -696,53 +736,65 @@ fun TripScreen(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    val isVisited = selectedMarker.visited
+                if (canWrite) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        val isVisited = selectedMarker.visited
 
-                    // Button Animations
-                    val buttonColor by animateColorAsState(
-                        targetValue = if (isVisited) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
-                        label = "buttonColor"
-                    )
+                        val buttonColor by animateColorAsState(
+                            targetValue = if (isVisited) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
+                            label = "buttonColor"
+                        )
 
-                    var isPressed by remember { mutableStateOf(false) }
-                    val buttonScale by animateFloatAsState(
-                        targetValue = if (isPressed) 0.95f else 1f,
-                        animationSpec = spring(dampingRatio = 0.5f),
-                        label = "buttonScale"
-                    )
+                        var isPressed by remember { mutableStateOf(false) }
+                        val buttonScale by animateFloatAsState(
+                            targetValue = if (isPressed) 0.95f else 1f,
+                            animationSpec = spring(dampingRatio = 0.5f),
+                            label = "buttonScale"
+                        )
 
-                    Button(
-                        modifier = Modifier
-                            .weight(1f)
-                            .scale(buttonScale),
-                        colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
-                        onClick = {
-                            scope.launch {
-                                isPressed = true
-                                markerViewModel.updateMarker(selectedMarker.copy(visited = !selectedMarker.visited))
-                                delay(100)
-                                isPressed = false
+                        Button(
+                            modifier = Modifier
+                                .weight(1f)
+                                .scale(buttonScale),
+                            colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
+                            onClick = {
+                                scope.launch {
+                                    isPressed = true
+                                    markerViewModel.updateMarker(selectedMarker.copy(visited = !selectedMarker.visited))
+                                    delay(100)
+                                    isPressed = false
+                                }
+                            }
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isVisited) {
+                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                }
+                                Crossfade(targetState = isVisited, label = "buttonText") { visited ->
+                                    Text(if (visited) "Visited" else "Mark as visited")
+                                }
                             }
                         }
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (isVisited) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                            }
-                            Crossfade(targetState = isVisited, label = "buttonText") { visited ->
-                                Text(if (visited) "Visited" else "Mark as visited")
-                            }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Button(
+                            modifier = Modifier.weight(1f),
+                            onClick = { imagePickerLauncher.launch("image/*") }
+                        ) {
+                            Text("Add Photos")
                         }
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Button(
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            imagePickerLauncher.launch("image/*")
+                } else {
+                    // Read-only visited status for viewers
+                    val visitedColor = if (selectedMarker.visited) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (selectedMarker.visited) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = visitedColor, modifier = Modifier.padding(end = 4.dp))
                         }
-                    ) {
-                        Text("Add Photos")
+                        Text(
+                            text = if (selectedMarker.visited) "Visited" else "Not visited",
+                            color = visitedColor,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -833,6 +885,128 @@ fun TripScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
+    }
+
+    // Share Sheet — only owners can open this
+    if (showShareSheet) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showShareSheet = false
+                inviteEmail = ""
+            },
+            sheetState = shareSheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 32.dp)
+            ) {
+                Text("Share Trip", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Invite someone by their account email",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = inviteEmail,
+                    onValueChange = { inviteEmail = it },
+                    label = { Text("Email address") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text("Role", style = MaterialTheme.typography.labelLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf(
+                        "collaborator" to "Collaborator\n(Read + Write)",
+                        "viewer" to "Viewer\n(Read Only)"
+                    ).forEachIndexed { index, (value, label) ->
+                        OutlinedButton(
+                            onClick = { selectedInviteRole = value },
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(
+                                width = if (selectedInviteRole == value) 2.dp else 1.dp,
+                                color = if (selectedInviteRole == value) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (selectedInviteRole == value)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                else Color.Transparent,
+                                contentColor = if (selectedInviteRole == value)
+                                    MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface
+                            )
+                        ) {
+                            Text(label, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (index == 0) Spacer(modifier = Modifier.width(8.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = {
+                        if (tripId != null && inviteEmail.isNotBlank()) {
+                            tripViewModel.inviteUser(tripId, inviteEmail.trim(), selectedInviteRole)
+                            inviteEmail = ""
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = inviteEmail.isNotBlank()
+                ) {
+                    Text("Invite")
+                }
+
+                // Inline feedback — visible even when sheet is open
+                if (shareMessage != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = shareMessage!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (shareMessage!!.startsWith("Invited"))
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.error
+                    )
+                }
+
+                if (tripMembersDisplay.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text("Members", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    tripMembersDisplay.forEach { member ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = member.email ?: member.userId.take(8) + "…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = member.role.replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = when (member.role) {
+                                    "owner" -> MaterialTheme.colorScheme.primary
+                                    "collaborator" -> MaterialTheme.colorScheme.secondary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
             }
         }
     }

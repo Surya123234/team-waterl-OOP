@@ -2,10 +2,14 @@ package com.example.waterloop.data.repository
 
 import com.example.waterloop.data.model.Trip
 import com.example.waterloop.data.model.TripMember
+import com.example.waterloop.data.model.TripMemberWithEmail
+import com.example.waterloop.data.model.UserIdResult
 import com.example.waterloop.data.remote.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.storage.storage
 import android.util.Log
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 class TripRepository {
 
@@ -111,6 +115,63 @@ class TripRepository {
                     }
                 }
                 .decodeSingleOrNull<Trip>()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // --- Sharing / membership ---
+
+    /** Looks up a user's UUID by their email via the get_user_id_by_email RPC. Returns null if not found. */
+    suspend fun getUserIdByEmail(email: String): String? {
+        return try {
+            SupabaseClient.client.postgrest
+                .rpc("get_user_id_by_email", buildJsonObject { put("email_input", email.trim().lowercase()) })
+                .decodeList<UserIdResult>()
+                .firstOrNull()?.id
+        } catch (e: Exception) {
+            Log.w("TripRepository", "getUserIdByEmail failed: ${e.message}")
+            null
+        }
+    }
+
+    /** Adds a user to a trip with the given role ("collaborator" or "viewer"). */
+    suspend fun addTripMember(tripId: String, userId: String, role: String): Boolean {
+        return try {
+            val member = TripMember(tripId = tripId, userId = userId, role = role)
+            client.from("trip_members").insert(member)
+            true
+        } catch (e: Exception) {
+            Log.w("TripRepository", "addTripMember failed: ${e.message}")
+            false
+        }
+    }
+
+    /** Returns all members of a trip with their emails via the get_trip_members_with_emails RPC. */
+    suspend fun getTripMembersWithEmails(tripId: String): List<TripMemberWithEmail> {
+        return try {
+            SupabaseClient.client.postgrest
+                .rpc("get_trip_members_with_emails", buildJsonObject { put("trip_id_input", tripId) })
+                .decodeList<TripMemberWithEmail>()
+        } catch (e: Exception) {
+            Log.w("TripRepository", "getTripMembersWithEmails failed: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /** Returns the current user's role in a trip, or null if not a member. */
+    suspend fun getCurrentUserRole(tripId: String): String? {
+        val userId = authRepository.getCurrentUserId() ?: return null
+        return try {
+            client.from("trip_members")
+                .select {
+                    filter {
+                        eq("trip_id", tripId)
+                        eq("user_id", userId)
+                    }
+                }
+                .decodeSingleOrNull<TripMember>()
+                ?.role
         } catch (e: Exception) {
             null
         }
