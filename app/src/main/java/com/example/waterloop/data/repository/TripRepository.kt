@@ -1,128 +1,115 @@
 package com.example.waterloop.data.repository
 
+import android.util.Log
+import com.example.waterloop.WaterlOOPApplication
+import com.example.waterloop.data.local.entity.CachedRoleEntity
+import com.example.waterloop.data.local.entity.TripEntity
+import com.example.waterloop.data.local.toModel
 import com.example.waterloop.data.model.Trip
 import com.example.waterloop.data.model.TripMember
 import com.example.waterloop.data.model.TripMemberWithEmail
 import com.example.waterloop.data.model.UserIdResult
 import com.example.waterloop.data.remote.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.storage.storage
-import android.util.Log
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.io.File
+import java.util.UUID
 
 class TripRepository {
 
-    private val client = SupabaseClient.client.postgrest
-    private val storage = SupabaseClient.client.storage
+    private val db get() = WaterlOOPApplication.instance.database
+    private val syncManager get() = WaterlOOPApplication.instance.syncManager
     private val authRepository = AuthRepository()
 
-    suspend fun createTrip(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
-        // owner_id is non-nullable in the db schema, so if there's no session we bail early
-        // rather than hitting a supabase constraint violation. in practice this shouldn't
-        // happen since navigation prevents reaching this screen without being logged in.
-        val userId = authRepository.getCurrentUserId() ?: return null
+    // Remote client kept only for online-only operations (sharing, role lookup)
+    private val remoteClient = SupabaseClient.client.postgrest
 
-        val trip = Trip(
+    // CRUD operations (local-first)
+
+    suspend fun createTrip(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
+        val userId = authRepository.getCurrentUserId() ?: return null
+        val id = UUID.randomUUID().toString()
+
+        val entity = TripEntity(
+            id = id,
             ownerId = userId,
             title = title,
             city = city,
             startDate = startDate,
-            endDate = endDate
+            endDate = endDate,
+            synced = false,
+            updatedAt = System.currentTimeMillis()
         )
-
-        return try {
-            val insertedTrip = client.from("trips")
-                .insert(trip) {
-                    select()
-                }
-                .decodeSingle<Trip>()
-
-            val insertedId = insertedTrip.id ?: return null
-
-            val member = TripMember(
-                tripId = insertedId,
-                userId = userId,
-            )
-
-            client.from("trip_members")
-                .insert(member)
-
-            insertedTrip
-        } catch (e: Exception) {
-            null
-        }
+        db.tripDao().upsert(entity)
+        syncManager.requestSync()
+        return entity.toModel()
     }
 
     suspend fun updateTrip(trip: Trip): Trip? {
-        return try {
-            client.from("trips")
-                .update(trip) {
-                    filter {
-                        eq("id", trip.id!!)
-                    }
-                    select()
-                }
-                .decodeSingle<Trip>()
-        } catch (e: Exception) {
-            null
-        }
+        val existing = db.tripDao().getTripById(trip.id!!) ?: return null
+        val updated = existing.copy(
+            title = trip.title,
+            city = trip.city,
+            startDate = trip.startDate,
+            endDate = trip.endDate,
+            coverImageUrl = trip.coverImageUrl ?: existing.coverImageUrl,
+            synced = false,
+            updatedAt = System.currentTimeMillis()
+        )
+        db.tripDao().upsert(updated)
+        syncManager.requestSync()
+        return updated.toModel()
     }
 
     suspend fun deleteTrip(tripId: String): Boolean {
-        return try {
-            client.from("trips")
-                .delete {
-                    filter {
-                        eq("id", tripId)
-                    }
-                }
-            true
-        } catch (e: Exception) {
-            false
+        // Cascade locally: photos → markers → trip
+        val markers = db.markerDao().getMarkersForTrip(tripId)
+        for (marker in markers) {
+            val photos = db.markerPhotoDao().getPhotosForMarker(marker.id)
+            for (photo in photos) {
+                db.markerPhotoDao().markDeleted(photo.id)
+            }
+            db.markerDao().markDeleted(marker.id)
         }
+        db.tripDao().markDeleted(tripId)
+        syncManager.requestSync()
+        return true
     }
 
     suspend fun getTrips(): List<Trip> {
-        // bail early if no session — shouldn't happen in normal flow but safe to guard
-        val userId = authRepository.getCurrentUserId() ?: return emptyList()
-
-        // get all trip ids this user is a member of
-        val memberTripIds = SupabaseClient.client.postgrest
-            .from("trip_members")
-            .select {
-                filter { eq("user_id", userId) }
-            }
-            .decodeList<TripMember>()
-            .map { it.tripId }
-
-        if (memberTripIds.isEmpty()) return emptyList()
-
-        // fetch only trips the user belongs to
-        return client.from("trips")
-            .select {
-                filter { isIn("id", memberTripIds) }
-            }
-            .decodeList()
+        return db.tripDao().getAllTrips().map { it.toModel() }
     }
 
     suspend fun getTripById(tripId: String): Trip? {
-        return try {
-            client.from("trips")
-                .select {
-                    filter {
-                        eq("id", tripId)
-                    }
-                }
-                .decodeSingleOrNull<Trip>()
-        } catch (e: Exception) {
-            null
-        }
+        val entity = db.tripDao().getTripById(tripId) ?: return null
+        return if (entity.locallyDeleted) null else entity.toModel()
     }
 
-    // --- Sharing / membership ---
+    // Cover image (saves locally, SyncManager uploads to Supabase Storage later)
 
-    /** Looks up a user's UUID by their email via the get_user_id_by_email RPC. Returns null if not found. */
+    suspend fun uploadTripCoverImage(tripId: String, fileName: String, bytes: ByteArray): String? {
+        val filesDir = WaterlOOPApplication.instance.filesDir
+        val localFile = File(filesDir, "covers/${tripId}_$fileName")
+        localFile.parentFile?.mkdirs()
+        localFile.writeBytes(bytes)
+
+        val entity = db.tripDao().getTripById(tripId) ?: return null
+        db.tripDao().upsert(
+            entity.copy(
+                localCoverImagePath = localFile.absolutePath,
+                synced = false,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+        syncManager.requestSync()
+
+        // Return a file URI so Coil can render the image immediately
+        return "file://${localFile.absolutePath}"
+    }
+
+    // Sharing / membership (online-only)
+
     suspend fun getUserIdByEmail(email: String): String? {
         return try {
             SupabaseClient.client.postgrest
@@ -135,11 +122,10 @@ class TripRepository {
         }
     }
 
-    /** Adds a user to a trip with the given role ("collaborator" or "viewer"). */
     suspend fun addTripMember(tripId: String, userId: String, role: String): Boolean {
         return try {
             val member = TripMember(tripId = tripId, userId = userId, role = role)
-            client.from("trip_members").insert(member)
+            remoteClient.from("trip_members").insert(member)
             true
         } catch (e: Exception) {
             Log.w("TripRepository", "addTripMember failed: ${e.message}")
@@ -147,7 +133,6 @@ class TripRepository {
         }
     }
 
-    /** Returns all members of a trip with their emails via the get_trip_members_with_emails RPC. */
     suspend fun getTripMembersWithEmails(tripId: String): List<TripMemberWithEmail> {
         return try {
             SupabaseClient.client.postgrest
@@ -159,48 +144,32 @@ class TripRepository {
         }
     }
 
-    /** Returns the current user's role in a trip, or null if not a member. */
+    // Returns the current user's role in a trip. Caches in Room for offline access.
     suspend fun getCurrentUserRole(tripId: String): String? {
-        val userId = authRepository.getCurrentUserId() ?: return null
-        return try {
-            client.from("trip_members")
-                .select {
-                    filter {
-                        eq("trip_id", tripId)
-                        eq("user_id", userId)
+        if (syncManager.isOnline()) {
+            val userId = authRepository.getCurrentUserId() ?: return null
+            return try {
+                val role = remoteClient.from("trip_members")
+                    .select {
+                        filter {
+                            eq("trip_id", tripId)
+                            eq("user_id", userId)
+                        }
                     }
+                    .decodeSingleOrNull<TripMember>()
+                    ?.role
+
+                // cache the role for offline use
+                if (role != null) {
+                    db.cachedRoleDao().upsert(CachedRoleEntity(tripId = tripId, role = role))
                 }
-                .decodeSingleOrNull<TripMember>()
-                ?.role
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    suspend fun uploadTripCoverImage(tripId: String, fileName: String, bytes: ByteArray): String? {
-        val bucketName = "trip-covers"
-        val path = "$tripId/$fileName"
-        val bucket = storage.from(bucketName)
-
-        println("Starting upload to bucket '$bucketName' at path '$path'")
-
-        return try {
-            bucket.upload(path, bytes) {
-                upsert = true
+                role
+            } catch (e: Exception) {
+                // fall back to cache on network error
+                db.cachedRoleDao().getRole(tripId)
             }
-
-            val publicUrl = bucket.publicUrl(path)
-            println("Upload succeeded! URL: $publicUrl")
-
-            // Fetch the current trip, then update it with the new cover URL
-            val trip = getTripById(tripId) ?: return null
-            val updatedTrip = trip.copy(coverImageUrl = publicUrl)
-            updateTrip(updatedTrip)
-            publicUrl
-        } catch (e: Exception) {
-            println("Upload failed: ${e.message}")
-            e.printStackTrace()
-            null
         }
+        // offline — return cached value
+        return db.cachedRoleDao().getRole(tripId)
     }
 }

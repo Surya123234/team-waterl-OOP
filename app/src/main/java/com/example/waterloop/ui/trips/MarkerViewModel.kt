@@ -3,6 +3,7 @@ package com.example.waterloop.ui.trips
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.waterloop.BuildConfig
+import com.example.waterloop.WaterlOOPApplication
 import com.example.waterloop.data.model.AutocompleteResponse
 import com.example.waterloop.data.model.AutocompleteResult
 import com.example.waterloop.data.model.GeocodeResponse
@@ -27,6 +28,7 @@ import java.nio.charset.StandardCharsets
 class MarkerViewModel : ViewModel() {
 
     private val repository = MarkerRepository()
+    private val syncManager get() = WaterlOOPApplication.instance.syncManager
 
     private val _markers = MutableStateFlow<List<Marker>>(emptyList())
     val markers: StateFlow<List<Marker>> = _markers
@@ -48,7 +50,16 @@ class MarkerViewModel : ViewModel() {
 
     fun loadMarkers(tripId: String) {
         viewModelScope.launch {
+            // show cached markers immediately
             _markers.value = repository.getMarkers(tripId)
+
+            // then sync and refresh
+            launch {
+                try {
+                    syncManager.sync()
+                    _markers.value = repository.getMarkers(tripId)
+                } catch (_: Exception) { /* offline — cached data is fine */ }
+            }
         }
     }
 
@@ -71,28 +82,32 @@ class MarkerViewModel : ViewModel() {
                 category = category,
                 notes = notes
             )
-            loadMarkers(tripId)
+            _markers.value = repository.getMarkers(tripId)
         }
     }
 
     fun updateMarker(marker: Marker) {
         viewModelScope.launch {
             repository.updateMarker(marker)
-            loadMarkers(marker.tripId)
+            _markers.value = repository.getMarkers(marker.tripId)
         }
     }
 
     fun deleteMarker(markerId: String, tripId: String) {
         viewModelScope.launch {
             repository.deleteMarker(markerId)
-            loadMarkers(tripId)
+            _markers.value = repository.getMarkers(tripId)
         }
     }
 
-    // Debounced autocomplete search
+    // Debounced autocomplete search — requires network
     fun searchPlaces(query: String) {
         searchJob?.cancel()
         if (query.length < 3) {
+            _autocompleteSuggestions.value = emptyList()
+            return
+        }
+        if (!syncManager.isOnline()) {
             _autocompleteSuggestions.value = emptyList()
             return
         }
@@ -115,8 +130,9 @@ class MarkerViewModel : ViewModel() {
         _autocompleteSuggestions.value = emptyList()
     }
 
-    // Geocode a location name, returns result only if confidence >= 0.7
+    // Geocode a location name — requires network
     suspend fun geocodeLocation(text: String): GeocodeResult? {
+        if (!syncManager.isOnline()) return null
         return try {
             val encoded = URLEncoder.encode(text.trim().lowercase(), StandardCharsets.UTF_8.toString())
             val response = httpClient.get(

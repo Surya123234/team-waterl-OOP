@@ -1,5 +1,6 @@
 package com.example.waterloop
 
+import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,11 +38,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.example.waterloop.ui.theme.WaterloopBlue
 import com.example.waterloop.ui.theme.WaterloopDarkBackground
 import com.example.waterloop.ui.theme.WaterloopGold
 import com.example.waterloop.ui.theme.WaterloopSurface
 import com.example.waterloop.ui.trips.AuthViewModel
+import com.example.waterloop.data.sync.ConnectivityObserver
 
 @Composable
 fun AuthScreen(authViewModel: AuthViewModel) {
@@ -53,6 +59,26 @@ fun AuthScreen(authViewModel: AuthViewModel) {
     // observe state from the viewmodel
     val isLoading by authViewModel.isLoading.collectAsState()
     val errorMessage by authViewModel.errorMessage.collectAsState()
+
+    // observe network connectivity
+    val context = LocalContext.current
+    val connectivityObserver = remember { ConnectivityObserver(context) }
+    val isOnline by connectivityObserver.observe().collectAsState(initial = true)
+
+    if (!isOnline) {
+        AlertDialog(
+            onDismissRequest = { },  // Prevent user from dismissing the alert by tapping outside
+            title = { Text("No Internet Connection") },
+            text = { Text("An internet connection is required to sign in to an existing account or sign up for a new account. Please connect and try again.") },
+            confirmButton = {
+                Button(onClick = {
+                    (context as? Activity)?.finishAffinity()
+                }) {
+                    Text("Close App")
+                }
+            }
+        )
+    }
 
     Box(
         modifier = Modifier

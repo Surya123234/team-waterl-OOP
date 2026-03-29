@@ -67,6 +67,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -75,6 +76,7 @@ import com.example.waterloop.ui.theme.WaterlOOPTheme
 import com.example.waterloop.ui.theme.WaterloopBlue
 import com.example.waterloop.ui.theme.WaterloopGold
 import com.example.waterloop.ui.theme.WaterloopDarkBackground
+import com.example.waterloop.data.sync.ConnectivityObserver
 import com.example.waterloop.data.model.Trip
 import com.example.waterloop.ui.trips.TripViewModel
 import com.example.waterloop.ui.trips.AuthViewModel
@@ -150,6 +152,11 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
     var tripToEdit by remember { mutableStateOf<Trip?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
 
+    // Monitor network status
+    val connectivityObserver = remember { ConnectivityObserver(context) }
+    val isOnline by connectivityObserver.observe().collectAsState(initial = true)
+    var showOfflineSignOutWarning by remember { mutableStateOf(false) }
+
     // Dialog state
     var tripTitle by remember { mutableStateOf("") }
     var tripCity by remember { mutableStateOf("") }
@@ -175,8 +182,11 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
         uri?.let { selectedCoverImageUri = it }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadTrips()
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            viewModel.loadTrips()
+        }
     }
 
     LaunchedEffect(tripCreationMessage) {
@@ -208,7 +218,11 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                     modifier = Modifier.weight(1f)
                 )
                 TextButton(onClick = {
-                    authViewModel.signOut()
+                    if (isOnline) {
+                        authViewModel.signOut()
+                    } else {
+                        showOfflineSignOutWarning = true
+                    }
                 }) {
                     Text(
                         text = "Sign Out",
@@ -371,6 +385,28 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                 }
             }
         }
+    }
+
+    // Alert Dialog for offline user trying to sign out
+    if (showOfflineSignOutWarning) {
+        AlertDialog(
+            onDismissRequest = { showOfflineSignOutWarning = false },
+            title = { Text("You're Offline") },
+            text = { Text("You won't be able to sign back in without an internet connection. Are you sure you want to sign out?") },
+            confirmButton = {
+                Button(onClick = {
+                    showOfflineSignOutWarning = false
+                    authViewModel.signOut()
+                }) {
+                    Text("Sign Out Anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showOfflineSignOutWarning = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Create Trip Dialog

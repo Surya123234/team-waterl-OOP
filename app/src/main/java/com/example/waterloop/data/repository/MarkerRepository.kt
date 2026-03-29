@@ -1,12 +1,16 @@
 package com.example.waterloop.data.repository
 
+import com.example.waterloop.WaterlOOPApplication
+import com.example.waterloop.data.local.entity.MarkerEntity
+import com.example.waterloop.data.local.toModel
 import com.example.waterloop.data.model.Marker
-import com.example.waterloop.data.remote.SupabaseClient
-import io.github.jan.supabase.postgrest.postgrest
+import java.util.UUID
 
 class MarkerRepository {
 
-    private val client = SupabaseClient.client.postgrest
+    private val db get() = WaterlOOPApplication.instance.database
+    private val syncManager get() = WaterlOOPApplication.instance.syncManager
+
     suspend fun createMarker(
         tripId: String,
         title: String,
@@ -16,53 +20,48 @@ class MarkerRepository {
         category: String? = null,
         notes: String? = null
     ): Marker {
-
-        val marker = Marker(
+        val id = UUID.randomUUID().toString()
+        val entity = MarkerEntity(
+            id = id,
             tripId = tripId,
             title = title,
             latitude = latitude,
             longitude = longitude,
             description = description,
             category = category,
-            notes = notes
+            notes = notes,
+            synced = false,
+            updatedAt = System.currentTimeMillis()
         )
-        return client.from("markers")
-            .insert(marker) {
-                select()
-            }
-            .decodeSingle()
+        db.markerDao().upsert(entity)
+        syncManager.requestSync()
+        return entity.toModel()
     }
 
-    //read markers for a specific trip
     suspend fun getMarkers(tripId: String): List<Marker> {
-
-        return client.from("markers")
-            .select {
-                filter {
-                    eq("trip_id", tripId)
-                }
-            }
-            .decodeList()
+        return db.markerDao().getMarkersForTrip(tripId).map { it.toModel() }
     }
 
-    // update marker stuff
     suspend fun updateMarker(marker: Marker) {
-
-        client.from("markers")
-            .update(marker) {
-                filter {
-                    eq("id", marker.id!!)
-                }
-            }
+        val existing = db.markerDao().getMarkerById(marker.id!!) ?: return
+        db.markerDao().upsert(
+            existing.copy(
+                title = marker.title,
+                description = marker.description,
+                category = marker.category,
+                notes = marker.notes,
+                latitude = marker.latitude,
+                longitude = marker.longitude,
+                visited = marker.visited,
+                synced = false,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+        syncManager.requestSync()
     }
 
-    //delete the marker
     suspend fun deleteMarker(markerId: String) {
-        client.from("markers")
-            .delete {
-                filter {
-                    eq("id", markerId)
-                }
-            }
+        db.markerDao().markDeleted(markerId)
+        syncManager.requestSync()
     }
 }
