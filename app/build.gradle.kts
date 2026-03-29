@@ -9,12 +9,15 @@ plugins {
 
 android {
     namespace = "com.example.waterloop"
-    compileSdk = 36
-
+    compileSdk {
+        version = release(36) {
+            minorApiLevel = 1
+        }
+    }
     defaultConfig {
         applicationId = "com.example.waterloop"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -22,9 +25,7 @@ android {
 
         // Reference sensitive values in local.properties here to safely expose to rest of the app
         val properties = Properties()
-        if (project.rootProject.file("local.properties").exists()) {
-            properties.load(project.rootProject.file("local.properties").inputStream())
-        }
+        properties.load(project.rootProject.file("local.properties").inputStream())
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${properties.getProperty("SUPABASE_PUBLISHABLE_KEY")}\"")
         buildConfigField("String", "SUPABASE_URL", "\"${properties.getProperty("SUPABASE_URL")}\"")
         buildConfigField("String", "GEOAPIFY_API_KEY", "\"${properties.getProperty("GEOAPIFY_API_KEY")}\"")
@@ -69,36 +70,36 @@ dependencies {
 
     // supabase
     implementation(platform("io.github.jan-tennert.supabase:bom:3.3.0"))
-    implementation("io.ktor:ktor-client-android:3.0.1")
+    implementation("io.ktor:ktor-client-android:3.4.0")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
 
     // Mapbox
     implementation("com.mapbox.maps:android-ndk27:11.18.2")
     implementation("com.mapbox.extension:maps-compose-ndk27:11.18.2")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
 
     // Required modules
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.github.jan-tennert.supabase:storage-kt")
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     // Lifecycle
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
 
     // Navigation
-    implementation("androidx.navigation:navigation-compose:2.8.3")
+    implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("io.coil-kt:coil-compose:2.5.0")
 
     // Accompanist
-    implementation("com.google.accompanist:accompanist-permissions:0.36.0")
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 
     // Room
-    val roomVersion = "2.7.0-alpha11"
+    val roomVersion = "2.7.1"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
