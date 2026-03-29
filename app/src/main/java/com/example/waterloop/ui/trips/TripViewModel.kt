@@ -4,18 +4,20 @@ import android.content.ContentResolver
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.waterloop.WaterlOOPApplication
 import com.example.waterloop.data.model.Trip
 import com.example.waterloop.data.repository.TripRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-/** UI model for displaying a trip member with their email and role. */
+// UI model for displaying a trip member with their email and role.
 data class TripMemberDisplay(val userId: String, val email: String?, val role: String)
 
 class TripViewModel : ViewModel() {
 
     private val repository = TripRepository()
+    private val syncManager get() = WaterlOOPApplication.instance.syncManager
 
     private val _trips = MutableStateFlow<List<Trip>>(emptyList())
     val trips: StateFlow<List<Trip>> = _trips
@@ -37,7 +39,16 @@ class TripViewModel : ViewModel() {
 
     fun loadTrips() {
         viewModelScope.launch {
+            // show cached data immediately
             _trips.value = repository.getTrips()
+
+            // then sync with remote and refresh
+            launch {
+                try {
+                    syncManager.sync()
+                    _trips.value = repository.getTrips()
+                } catch (_: Exception) { /* offline or sync error — cached data is fine */ }
+            }
         }
     }
 
@@ -120,6 +131,10 @@ class TripViewModel : ViewModel() {
 
     fun inviteUser(tripId: String, email: String, role: String) {
         viewModelScope.launch {
+            if (!syncManager.isOnline()) {
+                _shareMessage.value = "Sharing requires an internet connection"
+                return@launch
+            }
             val userId = repository.getUserIdByEmail(email)
             if (userId == null) {
                 _shareMessage.value = "No account found for $email"
