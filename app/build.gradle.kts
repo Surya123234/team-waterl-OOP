@@ -9,16 +9,12 @@ plugins {
 
 android {
     namespace = "com.example.waterloop"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.waterloop"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -26,7 +22,9 @@ android {
 
         // Reference sensitive values in local.properties here to safely expose to rest of the app
         val properties = Properties()
-        properties.load(project.rootProject.file("local.properties").inputStream())
+        if (project.rootProject.file("local.properties").exists()) {
+            properties.load(project.rootProject.file("local.properties").inputStream())
+        }
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${properties.getProperty("SUPABASE_PUBLISHABLE_KEY")}\"")
         buildConfigField("String", "SUPABASE_URL", "\"${properties.getProperty("SUPABASE_URL")}\"")
         buildConfigField("String", "GEOAPIFY_API_KEY", "\"${properties.getProperty("GEOAPIFY_API_KEY")}\"")
@@ -60,6 +58,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation("androidx.compose.material:material-icons-extended")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -70,38 +69,36 @@ dependencies {
 
     // supabase
     implementation(platform("io.github.jan-tennert.supabase:bom:3.3.0"))
-    implementation("io.ktor:ktor-client-android:3.4.0")
+    implementation("io.ktor:ktor-client-android:3.0.1")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
 
     // Mapbox
     implementation("com.mapbox.maps:android-ndk27:11.18.2")
     implementation("com.mapbox.extension:maps-compose-ndk27:11.18.2")
-    implementation ("com.mapbox.mapboxsdk:mapbox-android-gestures:x.y.z")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     // Required modules
     implementation("io.github.jan-tennert.supabase:auth-kt")
-//    implementation("io.github.jan-tennert.supabase:gotrue-android")
     implementation("io.github.jan-tennert.supabase:storage-kt")
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     // Lifecycle
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
     // Navigation
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.navigation:navigation-compose:2.8.3")
 
-    implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("io.coil-kt:coil-compose:2.7.0")
 
     // Accompanist
-    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+    implementation("com.google.accompanist:accompanist-permissions:0.36.0")
 
     // Room
-    val roomVersion = "2.7.1"
+    val roomVersion = "2.7.0-alpha11"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")

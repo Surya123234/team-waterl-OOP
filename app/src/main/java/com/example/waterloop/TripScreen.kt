@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.AlertDialog
@@ -92,10 +93,12 @@ import com.example.waterloop.ui.trips.MarkerPhotoViewModel
 import com.example.waterloop.ui.trips.MarkerViewModel
 import com.example.waterloop.ui.trips.TripMemberDisplay
 import com.example.waterloop.ui.trips.TripViewModel
+import com.example.waterloop.ui.trips.RouteState
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.annotation.Marker
+import com.mapbox.maps.extension.compose.annotation.generated.PolylineAnnotation
 import com.mapbox.geojson.Point
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
@@ -149,6 +152,9 @@ fun TripScreen(
     var showMarkerSheet by remember { mutableStateOf(false) }
     var showAllMarkersSheet by remember { mutableStateOf(false) }
     var showEditMarkerDialog by remember { mutableStateOf(false) }
+
+    // Route state
+    var routeState by remember { mutableStateOf(RouteState()) }
 
     // Derived state: Get the latest marker data from the list
     val selectedMarker = remember(markers, selectedMarkerId) {
@@ -238,17 +244,49 @@ fun TripScreen(
             )
         },
         floatingActionButton = {
-            if (mapViewportState.mapViewportStatus == ViewportStatus.Idle) {
+            Column(horizontalAlignment = Alignment.End) {
+                if (mapViewportState.mapViewportStatus == ViewportStatus.Idle) {
+                    SmallFloatingActionButton(
+                        onClick = {
+                            mapViewportState.transitionToFollowPuckState()
+                        },
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = android.R.drawable.ic_menu_mylocation),
+                            contentDescription = "Locate button"
+                        )
+                    }
+                }
+                
                 SmallFloatingActionButton(
                     onClick = {
-                        mapViewportState.transitionToFollowPuckState()
+                        routeState = routeState.copy(isCreating = !routeState.isCreating)
+                        if (routeState.isCreating) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Route Mode: Tap markers to add them to your route")
+                            }
+                        }
                     },
+                    containerColor = if (routeState.isCreating) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
-                    Image(
-                        painter = painterResource(id = android.R.drawable.ic_menu_mylocation),
-                        contentDescription = "Locate button"
+                    Icon(
+                        imageVector = if (routeState.isCreating) Icons.Default.Check else Icons.Default.Route,
+                        contentDescription = "Create Route"
                     )
+                }
+                
+                if (routeState.points.isNotEmpty()) {
+                    SmallFloatingActionButton(
+                        onClick = {
+                            routeState = routeState.copy(points = emptyList())
+                        },
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = "Clear Route")
+                    }
                 }
             }
         },
@@ -295,12 +333,29 @@ fun TripScreen(
                             false
                         }
                     ) {
+                        if (routeState.points.size >= 2) {
+                            PolylineAnnotation(
+                                points = routeState.points
+                            ) {
+                                lineColor = Color.Blue
+                                lineWidth = 5.0
+                            }
+                        }
+
                         markers.forEach { marker ->
+                            val point = Point.fromLngLat(marker.longitude, marker.latitude)
                             Marker(
-                                point = Point.fromLngLat(marker.longitude, marker.latitude),
+                                point = point,
                                 onClick = {
-                                    selectedMarkerId = marker.id
-                                    showMarkerSheet = true
+                                    if (routeState.isCreating) {
+                                        routeState = routeState.copy(points = routeState.points + point)
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Added ${marker.title} to route")
+                                        }
+                                    } else {
+                                        selectedMarkerId = marker.id
+                                        showMarkerSheet = true
+                                    }
                                     true
                                 }
                             )
