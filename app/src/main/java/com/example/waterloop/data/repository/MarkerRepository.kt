@@ -4,6 +4,8 @@ import com.example.waterloop.WaterlOOPApplication
 import com.example.waterloop.data.local.entity.MarkerEntity
 import com.example.waterloop.data.local.toModel
 import com.example.waterloop.data.model.Marker
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.util.UUID
 
 class MarkerRepository {
@@ -41,6 +43,9 @@ class MarkerRepository {
     suspend fun getMarkers(tripId: String): List<Marker> {
         return db.markerDao().getMarkersForTrip(tripId).map { it.toModel() }
     }
+
+    fun getMarkersFlow(tripId: String): Flow<List<Marker>> =
+        db.markerDao().getMarkersForTripFlow(tripId).map { entities -> entities.map { it.toModel() } }
 
     suspend fun updateMarker(marker: Marker) {
         val existing = db.markerDao().getMarkerById(marker.id!!) ?: return

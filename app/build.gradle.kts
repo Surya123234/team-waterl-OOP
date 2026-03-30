@@ -14,7 +14,6 @@ android {
             minorApiLevel = 1
         }
     }
-
     defaultConfig {
         applicationId = "com.example.waterloop"
         minSdk = 24
@@ -60,6 +59,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation("androidx.compose.material:material-icons-extended")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -70,20 +70,19 @@ dependencies {
 
     // supabase
     implementation(platform("io.github.jan-tennert.supabase:bom:3.3.0"))
-    implementation("io.ktor:ktor-client-android:3.4.0")
+    implementation("io.ktor:ktor-client-okhttp:3.4.0")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
 
     // Mapbox
     implementation("com.mapbox.maps:android-ndk27:11.18.2")
     implementation("com.mapbox.extension:maps-compose-ndk27:11.18.2")
-    implementation ("com.mapbox.mapboxsdk:mapbox-android-gestures:x.y.z")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0")
 
     // Required modules
     implementation("io.github.jan-tennert.supabase:auth-kt")
-//    implementation("io.github.jan-tennert.supabase:gotrue-android")
     implementation("io.github.jan-tennert.supabase:storage-kt")
+    implementation("io.github.jan-tennert.supabase:realtime-kt")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")

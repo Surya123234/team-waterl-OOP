@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.waterloop.WaterlOOPApplication
 import com.example.waterloop.data.model.MarkerPhoto
 import com.example.waterloop.data.repository.MarkerPhotoRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -19,31 +20,29 @@ class MarkerPhotoViewModel : ViewModel() {
     private val _markerPhotos = MutableStateFlow<List<MarkerPhoto>>(emptyList())
     val markerPhotos: StateFlow<List<MarkerPhoto>> = _markerPhotos
 
-    fun loadMarkerPhotos(markerId: String) {
-        viewModelScope.launch {
-            // show cached photos immediately (includes file:// URIs for offline photos)
-            _markerPhotos.value = repository.getMarkerPhotos(markerId)
+    private var photosObserverJob: Job? = null
 
-            // sync and refresh — photos with pending uploads will get their public URLs
-            launch {
-                try {
-                    syncManager.sync()
-                    _markerPhotos.value = repository.getMarkerPhotos(markerId)
-                } catch (_: Exception) { /* offline — local data is fine */ }
-            }
+    fun loadMarkerPhotos(markerId: String) {
+        // Observe Room — auto-updates when realtime writes a new photo or sync completes
+        photosObserverJob?.cancel()
+        photosObserverJob = viewModelScope.launch {
+            repository.getMarkerPhotosFlow(markerId).collect { _markerPhotos.value = it }
+        }
+
+        // Pull remote changes (also uploads any pending local photos)
+        viewModelScope.launch {
+            try { syncManager.sync() } catch (_: Exception) { /* offline — local data is fine */ }
         }
     }
 
-    fun uploadMarkerPhoto(markerId: String, uri: Uri, contentResolver: ContentResolver) {
+    fun uploadMarkerPhoto(markerId: String, uri: android.net.Uri, contentResolver: android.content.ContentResolver) {
         viewModelScope.launch {
             try {
                 val inputStream = contentResolver.openInputStream(uri)
                 val bytes = inputStream?.readBytes() ?: return@launch
                 val fileName = "photo_${System.currentTimeMillis()}.jpg"
-                val newPhoto = repository.createMarkerPhotoWithUpload(markerId, fileName, bytes)
-                if (newPhoto != null) {
-                    loadMarkerPhotos(markerId)
-                }
+                repository.createMarkerPhotoWithUpload(markerId, fileName, bytes)
+                // Room Flow in photosObserverJob will emit the updated list automatically
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -52,16 +51,13 @@ class MarkerPhotoViewModel : ViewModel() {
 
     fun updateMarkerPhoto(photoId: String, markerId: String, newUrl: String) {
         viewModelScope.launch {
-            val photo = MarkerPhoto(id = photoId, markerId = markerId, photoUrl = newUrl)
-            repository.updateMarkerPhoto(photo)
-            loadMarkerPhotos(markerId)
+            repository.updateMarkerPhoto(MarkerPhoto(id = photoId, markerId = markerId, photoUrl = newUrl))
         }
     }
 
     fun deleteMarkerPhoto(photoId: String, markerId: String) {
         viewModelScope.launch {
             repository.deleteMarkerPhoto(photoId)
-            loadMarkerPhotos(markerId)
         }
     }
 }

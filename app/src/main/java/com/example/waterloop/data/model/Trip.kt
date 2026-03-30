@@ -27,5 +27,8 @@ data class Trip (
     val coverImageUrl: String? = null,
 
     @SerialName("status")
-    val status: String = "planned"
+    val status: String = "planned",
+
+    @SerialName("routes")
+    val routes: List<List<Double>>? = null
 )

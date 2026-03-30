@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import com.example.waterloop.data.local.dao.CachedRoleDao
 import com.example.waterloop.data.local.dao.MarkerDao
 import com.example.waterloop.data.local.dao.MarkerPhotoDao
@@ -25,9 +26,10 @@ import com.example.waterloop.data.local.entity.TripEntity
         MarkerPhotoEntity::class,
         CachedRoleEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun tripDao(): TripDao
@@ -50,7 +52,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "waterloop_db"
                 )
-                    .fallbackToDestructiveMigration(true)
+                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
                 instance

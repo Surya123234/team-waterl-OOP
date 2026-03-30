@@ -12,6 +12,7 @@ import com.example.waterloop.data.model.Trip
 import com.example.waterloop.data.model.TripMember
 import com.example.waterloop.data.remote.SupabaseClient
 import com.example.waterloop.data.repository.AuthRepository
+import com.mapbox.geojson.Point
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.CoroutineScope
@@ -131,7 +132,8 @@ class SyncManager private constructor(context: Context) {
                     startDate = entity.startDate,
                     endDate = entity.endDate,
                     coverImageUrl = coverUrl,
-                    status = entity.status
+                    status = entity.status,
+                    routes = entity.routes?.map { listOf(it.longitude(), it.latitude()) }
                 )
                 postgrest.from("trips").upsert(trip)
 
@@ -292,6 +294,7 @@ class SyncManager private constructor(context: Context) {
                         endDate = remote.endDate,
                         coverImageUrl = remote.coverImageUrl,
                         status = remote.status,
+                        routes = remote.routes?.map { Point.fromLngLat(it[0], it[1]) },
                         synced = true,
                         updatedAt = System.currentTimeMillis()
                     )
@@ -309,6 +312,7 @@ class SyncManager private constructor(context: Context) {
                             endDate = remote.endDate,
                             coverImageUrl = remote.coverImageUrl,
                             status = remote.status,
+                            routes = remote.routes?.map { Point.fromLngLat(it[0], it[1]) },
                             synced = true,
                             updatedAt = System.currentTimeMillis()
                         )

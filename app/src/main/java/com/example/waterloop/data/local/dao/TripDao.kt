@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.example.waterloop.data.local.entity.TripEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TripDao {
@@ -12,8 +13,14 @@ interface TripDao {
     @Query("SELECT * FROM trips WHERE locallyDeleted = 0")
     suspend fun getAllTrips(): List<TripEntity>
 
+    @Query("SELECT * FROM trips WHERE locallyDeleted = 0")
+    fun getAllTripsFlow(): Flow<List<TripEntity>>
+
     @Query("SELECT * FROM trips WHERE id = :id")
     suspend fun getTripById(id: String): TripEntity?
+
+    @Query("SELECT * FROM trips WHERE id = :id AND locallyDeleted = 0")
+    fun getTripByIdFlow(id: String): Flow<TripEntity?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(trip: TripEntity)
