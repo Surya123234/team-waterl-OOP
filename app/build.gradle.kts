@@ -70,7 +70,7 @@ dependencies {
 
     // supabase
     implementation(platform("io.github.jan-tennert.supabase:bom:3.3.0"))
-    implementation("io.ktor:ktor-client-android:3.4.0")
+    implementation("io.ktor:ktor-client-okhttp:3.4.0")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
 
     // Mapbox
@@ -82,6 +82,7 @@ dependencies {
     // Required modules
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.github.jan-tennert.supabase:storage-kt")
+    implementation("io.github.jan-tennert.supabase:realtime-kt")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")

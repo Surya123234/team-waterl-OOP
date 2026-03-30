@@ -12,7 +12,7 @@ import com.example.waterloop.data.model.Marker
 import com.example.waterloop.data.repository.MarkerRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.engine.android.Android
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.serialization.kotlinx.json.json
@@ -25,10 +25,13 @@ import kotlinx.serialization.json.Json
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
+
+
 class MarkerViewModel : ViewModel() {
 
     private val repository = MarkerRepository()
     private val syncManager get() = WaterlOOPApplication.instance.syncManager
+    private val realtimeManager get() = WaterlOOPApplication.instance.realtimeManager
 
     private val _markers = MutableStateFlow<List<Marker>>(emptyList())
     val markers: StateFlow<List<Marker>> = _markers
@@ -37,8 +40,9 @@ class MarkerViewModel : ViewModel() {
     val autocompleteSuggestions: StateFlow<List<AutocompleteResult>> = _autocompleteSuggestions
 
     private var searchJob: Job? = null
+    private var markersObserverJob: Job? = null
 
-    private val httpClient = HttpClient(Android) {
+    private val httpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
@@ -49,18 +53,19 @@ class MarkerViewModel : ViewModel() {
     }
 
     fun loadMarkers(tripId: String) {
-        viewModelScope.launch {
-            // show cached markers immediately
-            _markers.value = repository.getMarkers(tripId)
-
-            // then sync and refresh
-            launch {
-                try {
-                    syncManager.sync()
-                    _markers.value = repository.getMarkers(tripId)
-                } catch (_: Exception) { /* offline — cached data is fine */ }
-            }
+        // Observe Room — any write (sync pull, realtime event, local edit) auto-updates the UI
+        markersObserverJob?.cancel()
+        markersObserverJob = viewModelScope.launch {
+            repository.getMarkersFlow(tripId).collect { _markers.value = it }
         }
+
+        // Pull remote changes on first load
+        viewModelScope.launch {
+            try { syncManager.sync() } catch (_: Exception) { /* offline — cached data is fine */ }
+        }
+
+        // Open a realtime WebSocket channel for this trip
+        realtimeManager.subscribeToTrip(tripId)
     }
 
     fun createMarker(
@@ -82,21 +87,19 @@ class MarkerViewModel : ViewModel() {
                 category = category,
                 notes = notes
             )
-            _markers.value = repository.getMarkers(tripId)
+            // Room Flow in markersObserverJob will emit the updated list automatically
         }
     }
 
     fun updateMarker(marker: Marker) {
         viewModelScope.launch {
             repository.updateMarker(marker)
-            _markers.value = repository.getMarkers(marker.tripId)
         }
     }
 
     fun deleteMarker(markerId: String, tripId: String) {
         viewModelScope.launch {
             repository.deleteMarker(markerId)
-            _markers.value = repository.getMarkers(tripId)
         }
     }
 
@@ -147,6 +150,7 @@ class MarkerViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        realtimeManager.unsubscribeFromTrip()
         httpClient.close()
     }
 }

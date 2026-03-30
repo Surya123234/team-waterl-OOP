@@ -3,6 +3,7 @@ package com.example.waterloop
 import android.app.Application
 import com.example.waterloop.data.local.AppDatabase
 import com.example.waterloop.data.remote.SupabaseClient
+import com.example.waterloop.data.sync.RealtimeManager
 import com.example.waterloop.data.sync.SyncManager
 
 class WaterlOOPApplication : Application() {
@@ -13,6 +14,9 @@ class WaterlOOPApplication : Application() {
     lateinit var syncManager: SyncManager
         private set
 
+    lateinit var realtimeManager: RealtimeManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -21,6 +25,7 @@ class WaterlOOPApplication : Application() {
         database = AppDatabase.getInstance(this)
         syncManager = SyncManager.getInstance(this)
         syncManager.startObserving()
+        realtimeManager = RealtimeManager(database)
     }
 
     companion object {

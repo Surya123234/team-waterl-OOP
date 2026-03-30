@@ -6,7 +6,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.waterloop.WaterlOOPApplication
 import com.example.waterloop.data.model.Trip
+import com.example.waterloop.data.repository.AuthRepository
 import com.example.waterloop.data.repository.TripRepository
+import kotlinx.coroutines.Job
 import com.mapbox.geojson.Point
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +20,9 @@ data class TripMemberDisplay(val userId: String, val email: String?, val role: S
 class TripViewModel : ViewModel() {
 
     private val repository = TripRepository()
+    private val authRepository = AuthRepository()
     private val syncManager get() = WaterlOOPApplication.instance.syncManager
+    private val realtimeManager get() = WaterlOOPApplication.instance.realtimeManager
 
     private val _trips = MutableStateFlow<List<Trip>>(emptyList())
     val trips: StateFlow<List<Trip>> = _trips
@@ -38,53 +42,51 @@ class TripViewModel : ViewModel() {
     private val _shareMessage = MutableStateFlow<String?>(null)
     val shareMessage: StateFlow<String?> = _shareMessage
 
-    fun loadTrips() {
-        viewModelScope.launch {
-            // show cached data immediately
-            _trips.value = repository.getTrips()
+    private var tripsObserverJob: Job? = null
+    private var selectedTripObserverJob: Job? = null
 
-            // then sync with remote and refresh
-            launch {
-                try {
-                    syncManager.sync()
-                    _trips.value = repository.getTrips()
-                } catch (_: Exception) { /* offline or sync error — cached data is fine */ }
-            }
+    fun loadTrips() {
+        // Observe Room — any write (sync pull, realtime, local edit) auto-updates the UI
+        tripsObserverJob?.cancel()
+        tripsObserverJob = viewModelScope.launch {
+            repository.getTripsFlow().collect { _trips.value = it }
         }
+
+        // Pull remote changes on first load
+        viewModelScope.launch {
+            try { syncManager.sync() } catch (_: Exception) { /* offline or sync error — cached data is fine */ }
+        }
+
+        // Realtime: receive newly shared trips without waiting for the next sync
+        viewModelScope.launch {
+            val userId = authRepository.getCurrentUserId() ?: return@launch
+            realtimeManager.subscribeToUserTrips(userId)
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        realtimeManager.unsubscribeFromUserTrips()
     }
 
     fun createTrip(title: String, city: String?, startDate: String?, endDate: String?) {
         viewModelScope.launch {
             val newTrip = repository.createTrip(title, city, startDate, endDate)
-            if (newTrip != null) {
-                _tripCreationMessage.value = "Trip created successfully"
-                loadTrips()
-            } else {
-                _tripCreationMessage.value = "Failed to create trip"
-            }
+            _tripCreationMessage.value = if (newTrip != null) "Trip created successfully" else "Failed to create trip"
+            // Room Flow in tripsObserverJob will emit the updated list automatically
         }
     }
 
     suspend fun createTripAndReturn(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
         val newTrip = repository.createTrip(title, city, startDate, endDate)
-        if (newTrip != null) {
-            _tripCreationMessage.value = "Trip created successfully"
-            loadTrips()
-        } else {
-            _tripCreationMessage.value = "Failed to create trip"
-        }
+        _tripCreationMessage.value = if (newTrip != null) "Trip created successfully" else "Failed to create trip"
         return newTrip
     }
 
     fun updateTrip(trip: Trip) {
         viewModelScope.launch {
             val updated = repository.updateTrip(trip)
-            if (updated != null) {
-                _tripCreationMessage.value = "Trip updated successfully"
-                loadTrips()
-            } else {
-                _tripCreationMessage.value = "Failed to update trip"
-            }
+            _tripCreationMessage.value = if (updated != null) "Trip updated successfully" else "Failed to update trip"
         }
     }
 
@@ -99,12 +101,7 @@ class TripViewModel : ViewModel() {
         if (tripId == null) return
         viewModelScope.launch {
             val success = repository.deleteTrip(tripId)
-            if (success) {
-                _tripCreationMessage.value = "Trip deleted successfully"
-                loadTrips()
-            } else {
-                _tripCreationMessage.value = "Failed to delete trip"
-            }
+            _tripCreationMessage.value = if (success) "Trip deleted successfully" else "Failed to delete trip"
         }
     }
 
@@ -117,8 +114,10 @@ class TripViewModel : ViewModel() {
     }
 
     fun loadTripById(tripId: String) {
-        viewModelScope.launch {
-            _selectedTrip.value = repository.getTripById(tripId)
+        // Observe the trip reactively so realtime updates (including routes) auto-refresh the UI
+        selectedTripObserverJob?.cancel()
+        selectedTripObserverJob = viewModelScope.launch {
+            repository.getTripByIdFlow(tripId).collect { _selectedTrip.value = it }
         }
     }
 
@@ -168,12 +167,8 @@ class TripViewModel : ViewModel() {
             val bytes = inputStream?.readBytes() ?: return false
             val fileName = "cover_${System.currentTimeMillis()}.jpg"
             val url = repository.uploadTripCoverImage(tripId, fileName, bytes)
-            if (url != null) {
-                loadTrips()
-                true
-            } else {
-                false
-            }
+            url != null
+            // Room Flow in tripsObserverJob will emit the updated list automatically
         } catch (e: Exception) {
             e.printStackTrace()
             false
