@@ -12,7 +12,7 @@ import com.example.waterloop.data.model.Marker
 import com.example.waterloop.data.repository.MarkerRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.engine.android.Android
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.serialization.kotlinx.json.json
@@ -42,7 +42,7 @@ class MarkerViewModel : ViewModel() {
     private var searchJob: Job? = null
     private var markersObserverJob: Job? = null
 
-    private val httpClient = HttpClient(Android) {
+    private val httpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
