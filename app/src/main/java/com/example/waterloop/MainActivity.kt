@@ -87,6 +87,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.foundation.layout.PaddingValues
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -162,6 +166,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
     var tripCity by remember { mutableStateOf("") }
     var tripStartDate by remember { mutableStateOf("") }
     var tripEndDate by remember { mutableStateOf("") }
+    var tripStatus by remember { mutableStateOf("planned") }
 
     // Cover image state for dialogs
     var selectedCoverImageUri by remember { mutableStateOf<Uri?>(null) }
@@ -241,6 +246,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                     .height(200.dp)
                     .clickable {
                         tripTitle = ""; tripCity = ""; tripStartDate = ""; tripEndDate = ""
+                        tripStatus = "planned"
                         selectedCoverImageUri = null
                         showCreateDialog = true
                     },
@@ -339,6 +345,29 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                                     }
                                 }
                             }
+                            
+                            // Status Badge
+                            val statusColor = when (trip.status.lowercase()) {
+                                "planned" -> WaterloopGold
+                                "active" -> Color(0xFF4CAF50)
+                                "finished" -> Color.Gray
+                                else -> WaterloopBlue
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(8.dp)
+                                    .background(statusColor, RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = trip.status.uppercase(),
+                                    color = Color.White,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
                             // Action Icons (Edit and Delete only)
                             Row(
                                 modifier = Modifier
@@ -352,6 +381,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                                         tripCity = trip.city ?: ""
                                         tripStartDate = trip.startDate ?: ""
                                         tripEndDate = trip.endDate ?: ""
+                                        tripStatus = trip.status
                                         selectedCoverImageUri = null
                                     },
                                     modifier = Modifier
@@ -461,6 +491,39 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                         )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text(
+                        text = "Status",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf("planned", "active", "finished").forEach { status ->
+                            val isSelected = tripStatus == status
+                            val color = when (status) {
+                                "planned" -> WaterloopGold
+                                "active" -> Color(0xFF4CAF50)
+                                "finished" -> Color.Gray
+                                else -> WaterloopBlue
+                            }
+                            OutlinedButton(
+                                onClick = { tripStatus = status },
+                                colors = if (isSelected) ButtonDefaults.outlinedButtonColors(containerColor = color.copy(alpha = 0.2f), contentColor = color) 
+                                         else ButtonDefaults.outlinedButtonColors(),
+                                border = BorderStroke(1.dp, if (isSelected) color else Color.Gray),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp)
+                            ) {
+                                Text(status.replaceFirstChar { it.uppercase() }, fontSize = 11.sp, maxLines = 1)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // Cover Image Picker
                     Text(
@@ -505,7 +568,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
             confirmButton = {
                 Button(onClick = {
                     coroutineScope.launch {
-                        val newTrip = viewModel.createTripAndReturn(tripTitle, tripCity, tripStartDate, tripEndDate)
+                        val newTrip = viewModel.createTripAndReturn(tripTitle, tripCity, tripStartDate, tripEndDate, tripStatus)
                         if (newTrip?.id != null && selectedCoverImageUri != null) {
                             viewModel.uploadTripCoverImage(newTrip.id, selectedCoverImageUri!!, context.contentResolver)
                         }
@@ -574,6 +637,39 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                             }
                         )
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Status",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf("planned", "active", "finished").forEach { status ->
+                            val isSelected = tripStatus == status
+                            val color = when (status) {
+                                "planned" -> WaterloopGold
+                                "active" -> Color(0xFF4CAF50)
+                                "finished" -> Color.Gray
+                                else -> WaterloopBlue
+                            }
+                            OutlinedButton(
+                                onClick = { tripStatus = status },
+                                colors = if (isSelected) ButtonDefaults.outlinedButtonColors(containerColor = color.copy(alpha = 0.2f), contentColor = color) 
+                                         else ButtonDefaults.outlinedButtonColors(),
+                                border = BorderStroke(1.dp, if (isSelected) color else Color.Gray),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp)
+                            ) {
+                                Text(status.replaceFirstChar { it.uppercase() }, fontSize = 11.sp, maxLines = 1)
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
 
                     // Cover Image Picker
@@ -648,7 +744,8 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                             title = tripTitle,
                             city = tripCity,
                             startDate = tripStartDate,
-                            endDate = tripEndDate
+                            endDate = tripEndDate,
+                            status = tripStatus
                         ))
                         selectedCoverImageUri = null
                         tripToEdit = null

@@ -52,9 +52,9 @@ class TripViewModel : ViewModel() {
         }
     }
 
-    fun createTrip(title: String, city: String?, startDate: String?, endDate: String?) {
+    fun createTrip(title: String, city: String?, startDate: String?, endDate: String?, status: String = "planned") {
         viewModelScope.launch {
-            val newTrip = repository.createTrip(title, city, startDate, endDate)
+            val newTrip = repository.createTrip(title, city, startDate, endDate, status)
             if (newTrip != null) {
                 _tripCreationMessage.value = "Trip created successfully"
                 loadTrips()
@@ -64,8 +64,8 @@ class TripViewModel : ViewModel() {
         }
     }
 
-    suspend fun createTripAndReturn(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
-        val newTrip = repository.createTrip(title, city, startDate, endDate)
+    suspend fun createTripAndReturn(title: String, city: String?, startDate: String?, endDate: String?, status: String = "planned"): Trip? {
+        val newTrip = repository.createTrip(title, city, startDate, endDate, status)
         if (newTrip != null) {
             _tripCreationMessage.value = "Trip created successfully"
             loadTrips()
