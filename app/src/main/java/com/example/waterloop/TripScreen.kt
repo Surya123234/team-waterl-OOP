@@ -40,7 +40,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Route
-import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.text.style.TextAlign
@@ -78,7 +77,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -101,15 +99,12 @@ import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.annotation.Marker
-import com.mapbox.maps.extension.compose.annotation.ViewAnnotation
 import com.mapbox.maps.extension.compose.annotation.generated.PolylineAnnotation
 import com.mapbox.geojson.Point
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
-import com.mapbox.maps.viewannotation.ViewAnnotationAnchor
-import com.mapbox.maps.viewannotation.viewAnnotationOptions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -358,35 +353,6 @@ fun TripScreen(
                             ) {
                                 lineColor = Color.Blue
                                 lineWidth = 5.0
-                            }
-
-                            // Add direction arrows
-                            routeState.points.windowed(2).forEach { pair ->
-                                val p1 = pair[0]
-                                val p2 = pair[1]
-                                val midpoint = Point.fromLngLat(
-                                    (p1.longitude() + p2.longitude()) / 2.0,
-                                    (p1.latitude() + p2.latitude()) / 2.0
-                                )
-                                val bearing = calculateBearing(p1, p2)
-
-                                ViewAnnotation(
-                                    options = viewAnnotationOptions {
-                                        geometry(midpoint)
-                                        annotationAnchor {
-                                            anchor(ViewAnnotationAnchor.CENTER)
-                                        }
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Navigation,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .size(20.dp)
-                                            .rotate(bearing.toFloat()),
-                                        tint = Color.Blue
-                                    )
-                                }
                             }
                         }
 
@@ -1193,20 +1159,4 @@ fun TripScreen(
             }
         }
     }
-}
-
-private fun calculateBearing(start: Point, end: Point): Double {
-    val lat1 = Math.toRadians(start.latitude())
-    val lon1 = Math.toRadians(start.longitude())
-    val lat2 = Math.toRadians(end.latitude())
-    val lon2 = Math.toRadians(end.longitude())
-
-    val dLon = lon2 - lon1
-
-    val y = Math.sin(dLon) * Math.cos(lat2)
-    val x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
-
-    var brng = Math.atan2(y, x)
-    brng = Math.toDegrees(brng)
-    return (brng + 360) % 360
 }
