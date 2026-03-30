@@ -381,7 +381,7 @@ fun TripScreen(
                                         contentDescription = null,
                                         tint = WaterloopBlue,
                                         modifier = Modifier
-                                            .size(80.dp)
+                                            .size(50.dp)
                                             .rotate(bearing.toFloat() - 90f)
                                     )
                                 }
