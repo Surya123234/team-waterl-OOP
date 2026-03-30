@@ -14,7 +14,7 @@ data class TripEntity(
     val endDate: String? = null,
     val coverImageUrl: String? = null,
     val localCoverImagePath: String? = null,
-    val status: String = "active",
+    val status: String = "planned",
     val routes: List<Point>? = null,
 
     // New fields added for offline sync

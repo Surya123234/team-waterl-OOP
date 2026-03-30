@@ -107,6 +107,7 @@ import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.example.waterloop.ui.theme.WaterloopBlue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -289,9 +290,9 @@ fun TripScreen(
                         }
                     },
                     modifier = Modifier.padding(bottom = 8.dp),
-                    colors = if (routeState.isCreating) 
+                    colors = if (routeState.isCreating)
                         ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
-                    else 
+                    else
                         ButtonDefaults.buttonColors()
                 ) {
                     Icon(
@@ -359,6 +360,7 @@ fun TripScreen(
                         markers.forEach { marker ->
                             val point = Point.fromLngLat(marker.longitude, marker.latitude)
                             Marker(
+                                color = if (marker.visited) Color.Green else WaterloopBlue,
                                 point = point,
                                 onClick = {
                                     if (routeState.isCreating) {
@@ -725,7 +727,7 @@ fun TripScreen(
                             if (selectedMarker.id != null && tripId != null) {
                                 val deletedMarkerPoint = Point.fromLngLat(selectedMarker.longitude, selectedMarker.latitude)
                                 markerViewModel.deleteMarker(selectedMarker.id!!, tripId)
-                                
+
                                 // Update route if deleted marker was part of it
                                 val newPoints = routeState.points.filter { point ->
                                     point.longitude() != deletedMarkerPoint.longitude() ||

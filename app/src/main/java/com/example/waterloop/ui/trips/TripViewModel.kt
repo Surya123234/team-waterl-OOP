@@ -69,16 +69,16 @@ class TripViewModel : ViewModel() {
         realtimeManager.unsubscribeFromUserTrips()
     }
 
-    fun createTrip(title: String, city: String?, startDate: String?, endDate: String?) {
+    fun createTrip(title: String, city: String?, startDate: String?, endDate: String?, status: String = "planned") {
         viewModelScope.launch {
-            val newTrip = repository.createTrip(title, city, startDate, endDate)
+            val newTrip = repository.createTrip(title, city, startDate, endDate, status)
             _tripCreationMessage.value = if (newTrip != null) "Trip created successfully" else "Failed to create trip"
             // Room Flow in tripsObserverJob will emit the updated list automatically
         }
     }
 
-    suspend fun createTripAndReturn(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
-        val newTrip = repository.createTrip(title, city, startDate, endDate)
+    suspend fun createTripAndReturn(title: String, city: String?, startDate: String?, endDate: String?, status: String = "planned"): Trip? {
+        val newTrip = repository.createTrip(title, city, startDate, endDate, status)
         _tripCreationMessage.value = if (newTrip != null) "Trip created successfully" else "Failed to create trip"
         return newTrip
     }

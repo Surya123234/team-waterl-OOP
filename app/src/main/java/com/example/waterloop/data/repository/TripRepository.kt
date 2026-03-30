@@ -30,7 +30,7 @@ class TripRepository {
 
     // CRUD operations (local-first)
 
-    suspend fun createTrip(title: String, city: String?, startDate: String?, endDate: String?): Trip? {
+    suspend fun createTrip(title: String, city: String?, startDate: String?, endDate: String?, status: String = "planned"): Trip? {
         val userId = authRepository.getCurrentUserId() ?: return null
         val id = UUID.randomUUID().toString()
 
@@ -41,6 +41,7 @@ class TripRepository {
             city = city,
             startDate = startDate,
             endDate = endDate,
+            status = status,
             synced = false,
             updatedAt = System.currentTimeMillis()
         )
@@ -56,6 +57,7 @@ class TripRepository {
             city = trip.city,
             startDate = trip.startDate,
             endDate = trip.endDate,
+            status = trip.status,
             coverImageUrl = trip.coverImageUrl ?: existing.coverImageUrl,
             routes = trip.routes?.map { Point.fromLngLat(it[0], it[1]) },
             synced = false,
