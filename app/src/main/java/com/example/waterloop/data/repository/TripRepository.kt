@@ -6,6 +6,8 @@ import com.example.waterloop.data.local.entity.CachedRoleEntity
 import com.example.waterloop.data.local.entity.TripEntity
 import com.example.waterloop.data.local.toModel
 import com.example.waterloop.data.model.Trip
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import com.example.waterloop.data.model.TripMember
 import com.example.waterloop.data.model.TripMemberWithEmail
 import com.example.waterloop.data.model.UserIdResult
@@ -94,6 +96,9 @@ class TripRepository {
     suspend fun getTrips(): List<Trip> {
         return db.tripDao().getAllTrips().map { it.toModel() }
     }
+
+    fun getTripsFlow(): Flow<List<Trip>> =
+        db.tripDao().getAllTripsFlow().map { entities -> entities.map { it.toModel() } }
 
     suspend fun getTripById(tripId: String): Trip? {
         val entity = db.tripDao().getTripById(tripId) ?: return null

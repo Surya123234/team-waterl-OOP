@@ -5,12 +5,16 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.example.waterloop.data.local.entity.MarkerEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MarkerDao {
 
     @Query("SELECT * FROM markers WHERE tripId = :tripId AND locallyDeleted = 0")
     suspend fun getMarkersForTrip(tripId: String): List<MarkerEntity>
+
+    @Query("SELECT * FROM markers WHERE tripId = :tripId AND locallyDeleted = 0")
+    fun getMarkersForTripFlow(tripId: String): Flow<List<MarkerEntity>>
 
     @Query("SELECT * FROM markers WHERE id = :id")
     suspend fun getMarkerById(id: String): MarkerEntity?

@@ -5,12 +5,16 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.example.waterloop.data.local.entity.TripEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TripDao {
 
     @Query("SELECT * FROM trips WHERE locallyDeleted = 0")
     suspend fun getAllTrips(): List<TripEntity>
+
+    @Query("SELECT * FROM trips WHERE locallyDeleted = 0")
+    fun getAllTripsFlow(): Flow<List<TripEntity>>
 
     @Query("SELECT * FROM trips WHERE id = :id")
     suspend fun getTripById(id: String): TripEntity?

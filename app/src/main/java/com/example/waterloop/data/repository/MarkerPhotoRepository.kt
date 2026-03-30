@@ -4,6 +4,8 @@ import com.example.waterloop.WaterlOOPApplication
 import com.example.waterloop.data.local.entity.MarkerPhotoEntity
 import com.example.waterloop.data.local.toModel
 import com.example.waterloop.data.model.MarkerPhoto
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.io.File
 import java.util.UUID
 
@@ -47,6 +49,9 @@ class MarkerPhotoRepository {
     suspend fun getMarkerPhotos(markerId: String): List<MarkerPhoto> {
         return db.markerPhotoDao().getPhotosForMarker(markerId).map { it.toModel() }
     }
+
+    fun getMarkerPhotosFlow(markerId: String): Flow<List<MarkerPhoto>> =
+        db.markerPhotoDao().getPhotosForMarkerFlow(markerId).map { entities -> entities.map { it.toModel() } }
 
     suspend fun updateMarkerPhoto(markerPhoto: MarkerPhoto) {
         val existing = db.markerPhotoDao().getPhotoById(markerPhoto.id!!) ?: return
