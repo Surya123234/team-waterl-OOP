@@ -42,4 +42,29 @@ interface MarkerDao {
 
     @Query("UPDATE markers SET synced = 1 WHERE id = :id")
     suspend fun markSynced(id: String)
+
+    /**
+     * Returns all non-deleted markers within a bounding box around (lat, lng) for a trip.
+     * The caller supplies a delta that defines the box (e.g. ~0.00045 ≈ 50 m).
+     */
+    @Query("""
+        SELECT * FROM markers
+        WHERE tripId = :tripId
+          AND latitude  BETWEEN :latMin AND :latMax
+          AND longitude BETWEEN :lngMin AND :lngMax
+          AND locallyDeleted = 0
+        ORDER BY updatedAt DESC
+    """)
+    suspend fun getMarkersNearLocation(
+        tripId: String,
+        latMin: Double, latMax: Double,
+        lngMin: Double, lngMax: Double
+    ): List<MarkerEntity>
+
+    /**
+     * Returns all non-deleted markers for a given trip. Used by duplicate detection
+     * which performs proximity grouping in Kotlin.
+     */
+    @Query("SELECT * FROM markers WHERE tripId = :tripId AND locallyDeleted = 0 ORDER BY updatedAt DESC")
+    suspend fun getNonDeletedMarkersForTrip(tripId: String): List<MarkerEntity>
 }
