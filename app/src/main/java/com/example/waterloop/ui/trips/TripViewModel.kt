@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.waterloop.WaterlOOPApplication
 import com.example.waterloop.data.model.Trip
+import com.example.waterloop.data.repository.AuthRepository
 import com.example.waterloop.data.repository.TripRepository
 import kotlinx.coroutines.Job
 import com.mapbox.geojson.Point
@@ -19,7 +20,9 @@ data class TripMemberDisplay(val userId: String, val email: String?, val role: S
 class TripViewModel : ViewModel() {
 
     private val repository = TripRepository()
+    private val authRepository = AuthRepository()
     private val syncManager get() = WaterlOOPApplication.instance.syncManager
+    private val realtimeManager get() = WaterlOOPApplication.instance.realtimeManager
 
     private val _trips = MutableStateFlow<List<Trip>>(emptyList())
     val trips: StateFlow<List<Trip>> = _trips
@@ -52,6 +55,17 @@ class TripViewModel : ViewModel() {
         viewModelScope.launch {
             try { syncManager.sync() } catch (_: Exception) { /* offline or sync error — cached data is fine */ }
         }
+
+        // Realtime: receive newly shared trips without waiting for the next sync
+        viewModelScope.launch {
+            val userId = authRepository.getCurrentUserId() ?: return@launch
+            realtimeManager.subscribeToUserTrips(userId)
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        realtimeManager.unsubscribeFromUserTrips()
     }
 
     fun createTrip(title: String, city: String?, startDate: String?, endDate: String?) {

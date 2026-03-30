@@ -2,13 +2,16 @@ package com.example.waterloop.data.sync
 
 import android.util.Log
 import com.example.waterloop.data.local.AppDatabase
+import com.example.waterloop.data.local.entity.CachedRoleEntity
 import com.example.waterloop.data.local.entity.MarkerEntity
 import com.example.waterloop.data.local.entity.MarkerPhotoEntity
 import com.example.waterloop.data.local.entity.TripEntity
 import com.example.waterloop.data.model.Marker
 import com.example.waterloop.data.model.MarkerPhoto
 import com.example.waterloop.data.model.Trip
+import com.example.waterloop.data.model.TripMember
 import com.example.waterloop.data.remote.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -43,6 +46,7 @@ class RealtimeManager(private val db: AppDatabase) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var activeChannel: RealtimeChannel? = null
     private var currentTripId: String? = null
+    private var userChannel: RealtimeChannel? = null
 
     companion object {
         private const val TAG = "RealtimeManager"
@@ -135,6 +139,67 @@ class RealtimeManager(private val db: AppDatabase) {
                 channel.subscribe()
                 Log.d(TAG, "Subscribed to realtime for trip $tripId")
             }.onFailure { Log.e(TAG, "Realtime subscribe failed: ${it.message}") }
+        }
+    }
+
+    /**
+     * Subscribe to trip_members INSERT events for [userId] so that when another user shares a
+     * trip, it appears immediately without waiting for the next connectivity-triggered sync.
+     * The trip row is fetched from Supabase and written to Room; [getAllTripsFlow] emits automatically.
+     */
+    fun subscribeToUserTrips(userId: String) {
+        unsubscribeFromUserTrips()
+
+        val channel = SupabaseClient.client.channel("user_trips_$userId")
+        userChannel = channel
+
+        channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") {
+            table = "trip_members"
+        }.onEach { action ->
+            runCatching {
+                val member = action.decodeRecord<TripMember>()
+                if (member.userId != userId) return@onEach  // guard — RLS should already limit this
+
+                val trip = SupabaseClient.client.postgrest
+                    .from("trips")
+                    .select { filter { eq("id", member.tripId) } }
+                    .decodeSingleOrNull<Trip>() ?: return@onEach
+
+                val tripId = trip.id ?: return@onEach
+                db.tripDao().upsert(
+                    TripEntity(
+                        id = tripId,
+                        ownerId = trip.ownerId,
+                        title = trip.title,
+                        city = trip.city,
+                        startDate = trip.startDate,
+                        endDate = trip.endDate,
+                        coverImageUrl = trip.coverImageUrl,
+                        status = trip.status,
+                        synced = true,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+                db.cachedRoleDao().upsert(CachedRoleEntity(tripId = tripId, role = member.role))
+                Log.d(TAG, "Realtime: trip $tripId shared with user")
+            }.onFailure { Log.w(TAG, "trip_members insert event error: ${it.message}") }
+        }.launchIn(scope)
+
+        scope.launch {
+            runCatching {
+                channel.subscribe()
+                Log.d(TAG, "Subscribed to user trips realtime for $userId")
+            }.onFailure { Log.e(TAG, "User trips realtime subscribe failed: ${it.message}") }
+        }
+    }
+
+    fun unsubscribeFromUserTrips() {
+        val channel = userChannel ?: return
+        userChannel = null
+        scope.launch {
+            runCatching {
+                SupabaseClient.client.realtime.removeChannel(channel)
+            }.onFailure { Log.w(TAG, "User trips realtime unsubscribe error: ${it.message}") }
         }
     }
 
