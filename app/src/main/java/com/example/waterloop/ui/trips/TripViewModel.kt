@@ -43,6 +43,7 @@ class TripViewModel : ViewModel() {
     val shareMessage: StateFlow<String?> = _shareMessage
 
     private var tripsObserverJob: Job? = null
+    private var selectedTripObserverJob: Job? = null
 
     fun loadTrips() {
         // Observe Room — any write (sync pull, realtime, local edit) auto-updates the UI
@@ -113,8 +114,10 @@ class TripViewModel : ViewModel() {
     }
 
     fun loadTripById(tripId: String) {
-        viewModelScope.launch {
-            _selectedTrip.value = repository.getTripById(tripId)
+        // Observe the trip reactively so realtime updates (including routes) auto-refresh the UI
+        selectedTripObserverJob?.cancel()
+        selectedTripObserverJob = viewModelScope.launch {
+            repository.getTripByIdFlow(tripId).collect { _selectedTrip.value = it }
         }
     }
 

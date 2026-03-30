@@ -105,6 +105,9 @@ class TripRepository {
         return if (entity.locallyDeleted) null else entity.toModel()
     }
 
+    fun getTripByIdFlow(tripId: String): Flow<Trip?> =
+        db.tripDao().getTripByIdFlow(tripId).map { it?.toModel() }
+
     // Cover image (saves locally, SyncManager uploads to Supabase Storage later)
 
     suspend fun uploadTripCoverImage(tripId: String, fileName: String, bytes: ByteArray): String? {

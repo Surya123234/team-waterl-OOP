@@ -18,6 +18,7 @@ import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecord
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
+import com.mapbox.geojson.Point
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -176,6 +177,7 @@ class RealtimeManager(private val db: AppDatabase) {
                         endDate = trip.endDate,
                         coverImageUrl = trip.coverImageUrl,
                         status = trip.status,
+                        routes = trip.routes?.map { Point.fromLngLat(it[0], it[1]) },
                         synced = true,
                         updatedAt = System.currentTimeMillis()
                     )
@@ -268,6 +270,7 @@ class RealtimeManager(private val db: AppDatabase) {
         if (id != currentTripId) return  // ignore events from other trips
         val local = db.tripDao().getTripById(id)
         if (local != null && !local.synced) return
+        val routePoints = trip.routes?.map { Point.fromLngLat(it[0], it[1]) }
         db.tripDao().upsert(
             (local ?: TripEntity(
                 id = id,
@@ -278,6 +281,7 @@ class RealtimeManager(private val db: AppDatabase) {
                 endDate = trip.endDate,
                 coverImageUrl = trip.coverImageUrl,
                 status = trip.status,
+                routes = routePoints,
                 synced = true,
                 updatedAt = System.currentTimeMillis()
             )).copy(
@@ -287,6 +291,7 @@ class RealtimeManager(private val db: AppDatabase) {
                 endDate = trip.endDate,
                 coverImageUrl = trip.coverImageUrl ?: local?.coverImageUrl,
                 status = trip.status,
+                routes = routePoints ?: local?.routes,
                 synced = true,
                 updatedAt = System.currentTimeMillis()
             )

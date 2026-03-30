@@ -19,6 +19,9 @@ interface TripDao {
     @Query("SELECT * FROM trips WHERE id = :id")
     suspend fun getTripById(id: String): TripEntity?
 
+    @Query("SELECT * FROM trips WHERE id = :id AND locallyDeleted = 0")
+    fun getTripByIdFlow(id: String): Flow<TripEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(trip: TripEntity)
 
