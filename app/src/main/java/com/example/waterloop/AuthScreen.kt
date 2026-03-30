@@ -94,7 +94,7 @@ fun AuthScreen(authViewModel: AuthViewModel) {
 
             // app title — same branding as the loading screen
             Text(
-                text = "waterlOOP",
+                text = "RoutePal",
                 fontSize = 40.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Serif,
@@ -103,7 +103,7 @@ fun AuthScreen(authViewModel: AuthViewModel) {
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Interactive Travel Map Planner",
+                text = "Team waterlOOP",
                 fontSize = 13.sp,
                 color = Color.White.copy(alpha = 0.6f)
             )
