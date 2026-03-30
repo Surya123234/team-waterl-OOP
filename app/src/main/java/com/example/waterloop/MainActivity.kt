@@ -831,7 +831,7 @@ fun LoadingScreen() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "waterlOOP",
+                text = "RoutePal",
                 fontSize = 48.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Serif,
@@ -840,7 +840,7 @@ fun LoadingScreen() {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Interactive Travel Map Planner",
+                text = "Team WaterlOOP",
                 fontSize = 16.sp,
                 color = Color.White.copy(alpha = 0.8f)
             )
