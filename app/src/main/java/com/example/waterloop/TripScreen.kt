@@ -103,6 +103,7 @@ import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.example.waterloop.ui.theme.WaterloopBlue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -298,10 +299,10 @@ fun TripScreen(
                         markers.forEach { marker ->
                             Marker(
                                 point = Point.fromLngLat(marker.longitude, marker.latitude),
+                                color = if (marker.visited) Color.Green else WaterloopBlue,
                                 onClick = {
                                     selectedMarkerId = marker.id
                                     showMarkerSheet = true
-                                    true
                                 }
                             )
                         }
