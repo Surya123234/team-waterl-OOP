@@ -709,7 +709,14 @@ fun TripScreen(
                         }
                         IconButton(onClick = {
                             if (selectedMarker.id != null && tripId != null) {
-                                markerViewModel.deleteMarker(selectedMarker.id, tripId)
+                                val deletedMarkerPoint = Point.fromLngLat(selectedMarker.longitude, selectedMarker.latitude)
+                                markerViewModel.deleteMarker(selectedMarker.id!!, tripId)
+                                routeState = routeState.copy(
+                                    points = routeState.points.filter { point ->
+                                        point.longitude() != deletedMarkerPoint.longitude() ||
+                                        point.latitude() != deletedMarkerPoint.latitude()
+                                    }
+                                )
                             }
                             showMarkerSheet = false
                             selectedMarkerId = null
