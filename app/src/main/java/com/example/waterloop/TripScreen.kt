@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.text.style.TextAlign
@@ -77,6 +78,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -102,12 +104,17 @@ import com.mapbox.maps.extension.compose.annotation.Marker
 import com.mapbox.maps.extension.compose.annotation.generated.PolylineAnnotation
 import com.mapbox.geojson.Point
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
+import com.mapbox.maps.extension.compose.annotation.ViewAnnotation
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
+import com.mapbox.maps.viewannotation.annotationAnchor
+import com.mapbox.maps.viewannotation.viewAnnotationOptions
+import com.mapbox.maps.ViewAnnotationAnchor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.example.waterloop.ui.theme.WaterloopBlue
+import com.mapbox.maps.viewannotation.geometry
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -352,8 +359,32 @@ fun TripScreen(
                             PolylineAnnotation(
                                 points = routeState.points
                             ) {
-                                lineColor = Color.Blue
+                                lineColor = WaterloopBlue
                                 lineWidth = 5.0
+                            }
+
+                            // Render direction arrows between points to show route order
+                            routeState.points.zipWithNext().forEach { (start, end) ->
+                                val midpoint = calculateMidpoint(start, end)
+                                val bearing = calculateBearing(start, end)
+
+                                ViewAnnotation(
+                                    options = viewAnnotationOptions {
+                                        geometry(midpoint)
+                                        annotationAnchor {
+                                            anchor(ViewAnnotationAnchor.CENTER)
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = WaterloopBlue,
+                                        modifier = Modifier
+                                            .size(80.dp)
+                                            .rotate(bearing.toFloat() - 90f)
+                                    )
+                                }
                             }
                         }
 
@@ -1161,4 +1192,25 @@ fun TripScreen(
             }
         }
     }
+}
+
+private fun calculateBearing(start: Point, end: Point): Double {
+    val lat1 = Math.toRadians(start.latitude())
+    val lon1 = Math.toRadians(start.longitude())
+    val lat2 = Math.toRadians(end.latitude())
+    val lon2 = Math.toRadians(end.longitude())
+
+    val dLon = lon2 - lon1
+    val y = Math.sin(dLon) * Math.cos(lat2)
+    val x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
+    var brng = Math.atan2(y, x)
+    brng = Math.toDegrees(brng)
+    return (brng + 360) % 360
+}
+
+private fun calculateMidpoint(start: Point, end: Point): Point {
+    return Point.fromLngLat(
+        (start.longitude() + end.longitude()) / 2.0,
+        (start.latitude() + end.latitude()) / 2.0
+    )
 }
