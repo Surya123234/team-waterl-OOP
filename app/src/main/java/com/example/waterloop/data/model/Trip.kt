@@ -27,5 +27,5 @@ data class Trip (
     val coverImageUrl: String? = null,
 
     @SerialName("status")
-    val status: String = "active"
+    val status: String = "planned"
 )
