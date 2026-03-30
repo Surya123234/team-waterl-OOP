@@ -91,6 +91,7 @@ class SyncManager private constructor(context: Context) {
                 // pull remote changes to local following the pull order.
                 pullTrips()
                 pullMarkers()
+                deduplicateMarkers()
                 pullMarkerPhotos()
 
                 Log.d(TAG, "Sync completed successfully")
@@ -447,6 +448,70 @@ class SyncManager private constructor(context: Context) {
                     Log.w(TAG, "Failed to pull photos for marker ${marker.id}: ${e.message}")
                 }
             }
+        }
+    }
+
+    /**
+     * Detects duplicate markers within ~50 m of each other (same trip) and keeps only
+     * the one with the latest updatedAt (last write wins). Losers are deleted both
+     * locally and from Supabase.
+     */
+    private suspend fun deduplicateMarkers() {
+        // ~0.00045 degrees ≈ 50 metres
+        val delta = 0.00045
+
+        try {
+            val tripIds = db.tripDao().getSyncedIds() +
+                    db.tripDao().getUnsynced().map { it.id }
+
+            for (tripId in tripIds.distinct()) {
+                val markers = db.markerDao().getNonDeletedMarkersForTrip(tripId)
+                if (markers.size <= 1) continue
+
+                // Greedy proximity grouping: assign each marker to the first nearby cluster
+                val clusters = mutableListOf<MutableList<MarkerEntity>>()
+                for (m in markers) {
+                    val cluster = clusters.firstOrNull { group ->
+                        val anchor = group.first()
+                        Math.abs(anchor.latitude - m.latitude) <= delta &&
+                                Math.abs(anchor.longitude - m.longitude) <= delta
+                    }
+                    if (cluster != null) {
+                        cluster.add(m)
+                    } else {
+                        clusters.add(mutableListOf(m))
+                    }
+                }
+
+                for (cluster in clusters) {
+                    if (cluster.size <= 1) continue
+                    // markers are already sorted by updatedAt DESC — first is the winner
+                    val winner = cluster.first()
+                    for (loser in cluster.drop(1)) {
+                        try {
+                            // Delete associated photos from remote first
+                            val photos = db.markerPhotoDao().getPhotosForMarker(loser.id)
+                            for (photo in photos) {
+                                try {
+                                    postgrest.from("marker_photos").delete { filter { eq("id", photo.id) } }
+                                } catch (_: Exception) { }
+                                db.markerPhotoDao().hardDelete(photo.id)
+                            }
+
+                            // Delete the duplicate marker from remote and local
+                            if (loser.synced) {
+                                postgrest.from("markers").delete { filter { eq("id", loser.id) } }
+                            }
+                            db.markerDao().hardDelete(loser.id)
+                            Log.d(TAG, "Dedup: removed marker ${loser.id} (duplicate of ${winner.id})")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Dedup: failed to remove marker ${loser.id}: ${e.message}")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Dedup failed: ${e.message}")
         }
     }
 }

@@ -244,6 +244,33 @@ class RealtimeManager(private val db: AppDatabase) {
             )
         )
         Log.d(TAG, "Realtime upserted marker $id")
+
+        // Deduplicate: if another marker exists at the exact same location, keep last write
+        deduplicateAtLocation(marker.tripId, marker.latitude, marker.longitude)
+    }
+
+    /**
+     * If multiple markers exist within ~50 m of (lat, lng) for the same trip, keep the
+     * one with the latest updatedAt and delete the rest locally. Remote cleanup at next sync.
+     */
+    private suspend fun deduplicateAtLocation(tripId: String, lat: Double, lng: Double) {
+        // ~0.00045 degrees ≈ 50 metres
+        val delta = 0.00045
+        val nearby = db.markerDao().getMarkersNearLocation(
+            tripId,
+            lat - delta, lat + delta,
+            lng - delta, lng + delta
+        )
+        if (nearby.size <= 1) return
+
+        // Query returns ORDER BY updatedAt DESC — first is the winner
+        val winner = nearby.first()
+        for (loser in nearby.drop(1)) {
+            // Don't remove a marker the user is still editing locally
+            if (!loser.synced) continue
+            db.markerDao().hardDelete(loser.id)
+            Log.d(TAG, "Realtime dedup: removed marker ${loser.id} (duplicate of ${winner.id})")
+        }
     }
 
     private suspend fun upsertMarkerPhotoToRoom(photo: MarkerPhoto) {
