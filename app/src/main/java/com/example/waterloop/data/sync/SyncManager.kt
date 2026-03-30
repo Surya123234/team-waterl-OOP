@@ -148,10 +148,11 @@ class SyncManager private constructor(context: Context) {
                     entity.copy(
                         synced = true,
                         coverImageUrl = coverUrl,
-                        localCoverImagePath = null
+                        localCoverImagePath = null,
+                        updatedAt = System.currentTimeMillis()
                     )
                 )
-                Log.d(TAG, "Pushed trip ${entity.id}")
+                Log.d(TAG, "Pushed trip ${entity.id} with status ${entity.status}")
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to push trip ${entity.id}: ${e.message}")
             }
@@ -296,19 +297,23 @@ class SyncManager private constructor(context: Context) {
                     )
                 )
             } else if (local.synced && !local.locallyDeleted) {
-                // Local row is clean and safe to overwrite with remote data
-                db.tripDao().upsert(
-                    local.copy(
-                        title = remote.title,
-                        city = remote.city,
-                        startDate = remote.startDate,
-                        endDate = remote.endDate,
-                        coverImageUrl = remote.coverImageUrl,
-                        status = remote.status,
-                        synced = true,
-                        updatedAt = System.currentTimeMillis()
+                // Guard: Only overwrite if the local version hasn't been updated in the last 10 seconds.
+                // This prevents a stale "Pull" from overwriting a very recent "Push" due to remote indexing lag.
+                val recentlyUpdatedLocally = System.currentTimeMillis() - local.updatedAt < 10000
+                if (!recentlyUpdatedLocally) {
+                    db.tripDao().upsert(
+                        local.copy(
+                            title = remote.title,
+                            city = remote.city,
+                            startDate = remote.startDate,
+                            endDate = remote.endDate,
+                            coverImageUrl = remote.coverImageUrl,
+                            status = remote.status,
+                            synced = true,
+                            updatedAt = System.currentTimeMillis()
+                        )
                     )
-                )
+                }
             }
             // If local is unsynced, keep local. It will be pushed next cycle
         }
