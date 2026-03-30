@@ -10,6 +10,7 @@ import com.example.waterloop.data.model.TripMember
 import com.example.waterloop.data.model.TripMemberWithEmail
 import com.example.waterloop.data.model.UserIdResult
 import com.example.waterloop.data.remote.SupabaseClient
+import com.mapbox.geojson.Point
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -54,12 +55,25 @@ class TripRepository {
             startDate = trip.startDate,
             endDate = trip.endDate,
             coverImageUrl = trip.coverImageUrl ?: existing.coverImageUrl,
+            routes = trip.routes?.map { Point.fromLngLat(it[0], it[1]) },
             synced = false,
             updatedAt = System.currentTimeMillis()
         )
         db.tripDao().upsert(updated)
         syncManager.requestSync()
         return updated.toModel()
+    }
+
+    suspend fun updateTripRoutes(tripId: String, points: List<Point>): Boolean {
+        val existing = db.tripDao().getTripById(tripId) ?: return false
+        val updated = existing.copy(
+            routes = points,
+            synced = false,
+            updatedAt = System.currentTimeMillis()
+        )
+        db.tripDao().upsert(updated)
+        syncManager.requestSync()
+        return true
     }
 
     suspend fun deleteTrip(tripId: String): Boolean {

@@ -40,6 +40,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.AlertDialog
@@ -74,8 +76,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -98,12 +101,15 @@ import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.annotation.Marker
+import com.mapbox.maps.extension.compose.annotation.ViewAnnotation
 import com.mapbox.maps.extension.compose.annotation.generated.PolylineAnnotation
 import com.mapbox.geojson.Point
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.viewport.ViewportStatus
+import com.mapbox.maps.viewannotation.ViewAnnotationAnchor
+import com.mapbox.maps.viewannotation.viewAnnotationOptions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -203,6 +209,18 @@ fun TripScreen(
         }
     }
 
+    // Load existing route from trip
+    LaunchedEffect(selectedTrip) {
+        if (!routeState.isCreating) {
+            selectedTrip?.routes?.let { coords ->
+                val points = coords.map { Point.fromLngLat(it[0], it[1]) }
+                routeState = routeState.copy(points = points)
+            } ?: run {
+                routeState = routeState.copy(points = emptyList())
+            }
+        }
+    }
+
     LaunchedEffect(shareMessage) {
         shareMessage?.let {
             snackbarHostState.showSnackbar(it)
@@ -245,22 +263,29 @@ fun TripScreen(
         },
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End) {
-                if (mapViewportState.mapViewportStatus == ViewportStatus.Idle) {
-                    SmallFloatingActionButton(
+                if (routeState.points.isNotEmpty()) {
+                    Button(
                         onClick = {
-                            mapViewportState.transitionToFollowPuckState()
+                            routeState = routeState.copy(points = emptyList())
+                            if (tripId != null) {
+                                tripViewModel.updateTripRoutes(tripId, emptyList())
+                            }
                         },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                         modifier = Modifier.padding(bottom = 8.dp)
                     ) {
-                        Image(
-                            painter = painterResource(id = android.R.drawable.ic_menu_mylocation),
-                            contentDescription = "Locate button"
-                        )
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Delete Route")
                     }
                 }
-                
-                SmallFloatingActionButton(
+
+                Button(
                     onClick = {
+                        if (routeState.isCreating && tripId != null) {
+                            // Saving the route when exiting creation mode
+                            tripViewModel.updateTripRoutes(tripId, routeState.points)
+                        }
                         routeState = routeState.copy(isCreating = !routeState.isCreating)
                         if (routeState.isCreating) {
                             scope.launch {
@@ -268,25 +293,19 @@ fun TripScreen(
                             }
                         }
                     },
-                    containerColor = if (routeState.isCreating) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    colors = if (routeState.isCreating) 
+                        ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+                    else 
+                        ButtonDefaults.buttonColors()
                 ) {
                     Icon(
                         imageVector = if (routeState.isCreating) Icons.Default.Check else Icons.Default.Route,
-                        contentDescription = "Create Route"
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
                     )
-                }
-                
-                if (routeState.points.isNotEmpty()) {
-                    SmallFloatingActionButton(
-                        onClick = {
-                            routeState = routeState.copy(points = emptyList())
-                        },
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = "Clear Route")
-                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(text = if (routeState.isCreating) "Finish Route" else "Create Route")
                 }
             }
         },
@@ -339,6 +358,35 @@ fun TripScreen(
                             ) {
                                 lineColor = Color.Blue
                                 lineWidth = 5.0
+                            }
+
+                            // Add direction arrows
+                            routeState.points.windowed(2).forEach { pair ->
+                                val p1 = pair[0]
+                                val p2 = pair[1]
+                                val midpoint = Point.fromLngLat(
+                                    (p1.longitude() + p2.longitude()) / 2.0,
+                                    (p1.latitude() + p2.latitude()) / 2.0
+                                )
+                                val bearing = calculateBearing(p1, p2)
+
+                                ViewAnnotation(
+                                    options = viewAnnotationOptions {
+                                        geometry(midpoint)
+                                        annotationAnchor {
+                                            anchor(ViewAnnotationAnchor.CENTER)
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Navigation,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .rotate(bearing.toFloat()),
+                                        tint = Color.Blue
+                                    )
+                                }
                             }
                         }
 
@@ -711,12 +759,16 @@ fun TripScreen(
                             if (selectedMarker.id != null && tripId != null) {
                                 val deletedMarkerPoint = Point.fromLngLat(selectedMarker.longitude, selectedMarker.latitude)
                                 markerViewModel.deleteMarker(selectedMarker.id!!, tripId)
-                                routeState = routeState.copy(
-                                    points = routeState.points.filter { point ->
-                                        point.longitude() != deletedMarkerPoint.longitude() ||
-                                        point.latitude() != deletedMarkerPoint.latitude()
-                                    }
-                                )
+                                
+                                // Update route if deleted marker was part of it
+                                val newPoints = routeState.points.filter { point ->
+                                    point.longitude() != deletedMarkerPoint.longitude() ||
+                                    point.latitude() != deletedMarkerPoint.latitude()
+                                }
+                                if (newPoints.size != routeState.points.size) {
+                                    routeState = routeState.copy(points = newPoints)
+                                    tripViewModel.updateTripRoutes(tripId, newPoints)
+                                }
                             }
                             showMarkerSheet = false
                             selectedMarkerId = null
@@ -1141,4 +1193,20 @@ fun TripScreen(
             }
         }
     }
+}
+
+private fun calculateBearing(start: Point, end: Point): Double {
+    val lat1 = Math.toRadians(start.latitude())
+    val lon1 = Math.toRadians(start.longitude())
+    val lat2 = Math.toRadians(end.latitude())
+    val lon2 = Math.toRadians(end.longitude())
+
+    val dLon = lon2 - lon1
+
+    val y = Math.sin(dLon) * Math.cos(lat2)
+    val x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
+
+    var brng = Math.atan2(y, x)
+    brng = Math.toDegrees(brng)
+    return (brng + 360) % 360
 }
