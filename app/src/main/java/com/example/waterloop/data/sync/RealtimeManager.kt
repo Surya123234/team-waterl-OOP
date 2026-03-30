@@ -48,6 +48,7 @@ class RealtimeManager(private val db: AppDatabase) {
     private var activeChannel: RealtimeChannel? = null
     private var currentTripId: String? = null
     private var userChannel: RealtimeChannel? = null
+    private var currentUserId: String? = null
 
     companion object {
         private const val TAG = "RealtimeManager"
@@ -58,6 +59,7 @@ class RealtimeManager(private val db: AppDatabase) {
      * Must be called after the user has authenticated.
      */
     fun subscribeToTrip(tripId: String) {
+        if (tripId == currentTripId && activeChannel != null) return  // already subscribed
         unsubscribeFromTrip()
 
         val channel = SupabaseClient.client.channel("trip_$tripId")
@@ -149,10 +151,12 @@ class RealtimeManager(private val db: AppDatabase) {
      * The trip row is fetched from Supabase and written to Room; [getAllTripsFlow] emits automatically.
      */
     fun subscribeToUserTrips(userId: String) {
+        if (userId == currentUserId && userChannel != null) return  // already subscribed
         unsubscribeFromUserTrips()
 
         val channel = SupabaseClient.client.channel("user_trips_$userId")
         userChannel = channel
+        currentUserId = userId
 
         channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") {
             table = "trip_members"
@@ -198,6 +202,7 @@ class RealtimeManager(private val db: AppDatabase) {
     fun unsubscribeFromUserTrips() {
         val channel = userChannel ?: return
         userChannel = null
+        currentUserId = null
         scope.launch {
             runCatching {
                 SupabaseClient.client.realtime.removeChannel(channel)
