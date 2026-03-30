@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.waterloop.WaterlOOPApplication
 import com.example.waterloop.data.model.Trip
 import com.example.waterloop.data.repository.TripRepository
+import com.mapbox.geojson.Point
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -84,6 +85,13 @@ class TripViewModel : ViewModel() {
             } else {
                 _tripCreationMessage.value = "Failed to update trip"
             }
+        }
+    }
+
+    fun updateTripRoutes(tripId: String, points: List<Point>) {
+        viewModelScope.launch {
+            repository.updateTripRoutes(tripId, points)
+            loadTripById(tripId) // Refresh selected trip to reflect changes
         }
     }
 

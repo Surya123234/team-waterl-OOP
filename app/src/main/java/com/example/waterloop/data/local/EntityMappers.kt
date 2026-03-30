@@ -6,6 +6,7 @@ import com.example.waterloop.data.local.entity.TripEntity
 import com.example.waterloop.data.model.Marker
 import com.example.waterloop.data.model.MarkerPhoto
 import com.example.waterloop.data.model.Trip
+import com.mapbox.geojson.Point
 
 // Trip
 
@@ -18,7 +19,8 @@ fun TripEntity.toModel(): Trip = Trip(
     endDate = endDate,
     // prefer the remote URL; fall back to a file:// URI for offline cover images
     coverImageUrl = coverImageUrl ?: localCoverImagePath?.let { "file://$it" },
-    status = status
+    status = status,
+    routes = routes?.map { listOf(it.longitude(), it.latitude()) }
 )
 
 fun Trip.toEntity(
@@ -36,6 +38,7 @@ fun Trip.toEntity(
     coverImageUrl = coverImageUrl,
     localCoverImagePath = localCoverImagePath,
     status = status,
+    routes = routes?.map { Point.fromLngLat(it[0], it[1]) },
     synced = synced,
     updatedAt = updatedAt,
     locallyDeleted = locallyDeleted

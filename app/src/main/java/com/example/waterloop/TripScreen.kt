@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.AlertDialog
@@ -73,8 +75,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -92,10 +94,12 @@ import com.example.waterloop.ui.trips.MarkerPhotoViewModel
 import com.example.waterloop.ui.trips.MarkerViewModel
 import com.example.waterloop.ui.trips.TripMemberDisplay
 import com.example.waterloop.ui.trips.TripViewModel
+import com.example.waterloop.ui.trips.RouteState
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
 import com.mapbox.maps.extension.compose.annotation.Marker
+import com.mapbox.maps.extension.compose.annotation.generated.PolylineAnnotation
 import com.mapbox.geojson.Point
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
@@ -150,6 +154,9 @@ fun TripScreen(
     var showAllMarkersSheet by remember { mutableStateOf(false) }
     var showEditMarkerDialog by remember { mutableStateOf(false) }
 
+    // Route state
+    var routeState by remember { mutableStateOf(RouteState()) }
+
     // Derived state: Get the latest marker data from the list
     val selectedMarker = remember(markers, selectedMarkerId) {
         markers.find { it.id == selectedMarkerId }
@@ -197,6 +204,18 @@ fun TripScreen(
         }
     }
 
+    // Load existing route from trip
+    LaunchedEffect(selectedTrip) {
+        if (!routeState.isCreating) {
+            selectedTrip?.routes?.let { coords ->
+                val points = coords.map { Point.fromLngLat(it[0], it[1]) }
+                routeState = routeState.copy(points = points)
+            } ?: run {
+                routeState = routeState.copy(points = emptyList())
+            }
+        }
+    }
+
     LaunchedEffect(shareMessage) {
         shareMessage?.let {
             snackbarHostState.showSnackbar(it)
@@ -238,17 +257,50 @@ fun TripScreen(
             )
         },
         floatingActionButton = {
-            if (mapViewportState.mapViewportStatus == ViewportStatus.Idle) {
-                SmallFloatingActionButton(
+            Column(horizontalAlignment = Alignment.End) {
+                if (routeState.points.isNotEmpty()) {
+                    Button(
+                        onClick = {
+                            routeState = routeState.copy(points = emptyList())
+                            if (tripId != null) {
+                                tripViewModel.updateTripRoutes(tripId, emptyList())
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Delete Route")
+                    }
+                }
+
+                Button(
                     onClick = {
-                        mapViewportState.transitionToFollowPuckState()
+                        if (routeState.isCreating && tripId != null) {
+                            // Saving the route when exiting creation mode
+                            tripViewModel.updateTripRoutes(tripId, routeState.points)
+                        }
+                        routeState = routeState.copy(isCreating = !routeState.isCreating)
+                        if (routeState.isCreating) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Route Mode: Tap markers to add them to your route")
+                            }
+                        }
                     },
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    colors = if (routeState.isCreating) 
+                        ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+                    else 
+                        ButtonDefaults.buttonColors()
                 ) {
-                    Image(
-                        painter = painterResource(id = android.R.drawable.ic_menu_mylocation),
-                        contentDescription = "Locate button"
+                    Icon(
+                        imageVector = if (routeState.isCreating) Icons.Default.Check else Icons.Default.Route,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
                     )
+                    Spacer(Modifier.width(8.dp))
+                    Text(text = if (routeState.isCreating) "Finish Route" else "Create Route")
                 }
             }
         },
@@ -295,12 +347,29 @@ fun TripScreen(
                             false
                         }
                     ) {
+                        if (routeState.points.size >= 2) {
+                            PolylineAnnotation(
+                                points = routeState.points
+                            ) {
+                                lineColor = Color.Blue
+                                lineWidth = 5.0
+                            }
+                        }
+
                         markers.forEach { marker ->
+                            val point = Point.fromLngLat(marker.longitude, marker.latitude)
                             Marker(
-                                point = Point.fromLngLat(marker.longitude, marker.latitude),
+                                point = point,
                                 onClick = {
-                                    selectedMarkerId = marker.id
-                                    showMarkerSheet = true
+                                    if (routeState.isCreating) {
+                                        routeState = routeState.copy(points = routeState.points + point)
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Added ${marker.title} to route")
+                                        }
+                                    } else {
+                                        selectedMarkerId = marker.id
+                                        showMarkerSheet = true
+                                    }
                                     true
                                 }
                             )
@@ -654,7 +723,18 @@ fun TripScreen(
                         }
                         IconButton(onClick = {
                             if (selectedMarker.id != null && tripId != null) {
-                                markerViewModel.deleteMarker(selectedMarker.id, tripId)
+                                val deletedMarkerPoint = Point.fromLngLat(selectedMarker.longitude, selectedMarker.latitude)
+                                markerViewModel.deleteMarker(selectedMarker.id!!, tripId)
+                                
+                                // Update route if deleted marker was part of it
+                                val newPoints = routeState.points.filter { point ->
+                                    point.longitude() != deletedMarkerPoint.longitude() ||
+                                    point.latitude() != deletedMarkerPoint.latitude()
+                                }
+                                if (newPoints.size != routeState.points.size) {
+                                    routeState = routeState.copy(points = newPoints)
+                                    tripViewModel.updateTripRoutes(tripId, newPoints)
+                                }
                             }
                             showMarkerSheet = false
                             selectedMarkerId = null
