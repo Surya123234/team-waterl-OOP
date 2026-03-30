@@ -115,7 +115,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.example.waterloop.ui.theme.WaterloopBlue
 import com.mapbox.maps.viewannotation.geometry
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+val markerCategories = listOf("Food", "Shopping", "Sightseeing", "Accommodation", "Transport", "Nature", "Other")
 
+fun categoryColor(category: String?): Color = when (category?.lowercase()) {
+    "food"          -> Color(0xFFE53935) // red
+    "shopping"      -> Color(0xFFAB47BC) // purple
+    "sightseeing"   -> Color(0xFF1E88E5) // blue
+    "accommodation" -> Color(0xFFFFEB3B) // yellow
+    "transport"     -> Color(0xFFFF6D00) // orange
+    "nature"     -> Color(0xFF2E7D32) // green
+    "other"         -> Color(0xFF757575) // grey
+    else            -> WaterloopBlue   // default
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TripScreen(
@@ -392,6 +406,7 @@ fun TripScreen(
                             val point = Point.fromLngLat(marker.longitude, marker.latitude)
                             Marker(
                                 color = if (marker.visited) Color.Green else WaterloopBlue,
+
                                 point = point,
                                 onClick = {
                                     if (routeState.isCreating) {
@@ -623,12 +638,33 @@ fun TripScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = markerCategory,
-                        onValueChange = { markerCategory = it },
-                        label = { Text("Category (e.g., Food, Sight)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+//
+                    var categoryExpanded by remember { mutableStateOf(false) }
+
+                    ExposedDropdownMenuBox(
+                        expanded = categoryExpanded,
+                        onExpandedChange = { categoryExpanded = !categoryExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = markerCategory,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Category") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = categoryExpanded,
+                            onDismissRequest = { categoryExpanded = false }
+                        ) {
+                            markerCategories.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { Text(cat) },
+                                    onClick = { markerCategory = cat; categoryExpanded = false }
+                                )
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = markerNotes,
@@ -935,12 +971,38 @@ fun TripScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = editMarkerCategory,
-                        onValueChange = { editMarkerCategory = it },
-                        label = { Text("Category") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    var editCategoryExpanded by remember { mutableStateOf(false) }
+
+                    ExposedDropdownMenuBox(
+                        expanded = editCategoryExpanded,
+                        onExpandedChange = { editCategoryExpanded = !editCategoryExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = editMarkerCategory,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Category") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = editCategoryExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = editCategoryExpanded,
+                            onDismissRequest = { editCategoryExpanded = false }
+                        ) {
+                            markerCategories.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { Text(cat) },
+                                    onClick = { editMarkerCategory = cat; editCategoryExpanded = false }
+                                )
+                            }
+                        }
+                    }
+//                    OutlinedTextField(
+//                        value = editMarkerCategory,
+//                        onValueChange = { editMarkerCategory = it },
+//                        label = { Text("Category") },
+//                        modifier = Modifier.fillMaxWidth()
+//                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = editMarkerNotes,
