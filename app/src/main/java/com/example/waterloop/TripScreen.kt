@@ -405,8 +405,7 @@ fun TripScreen(
                         markers.forEach { marker ->
                             val point = Point.fromLngLat(marker.longitude, marker.latitude)
                             Marker(
-                                color = if (marker.visited) Color.Green else WaterloopBlue,
-
+                                color = if (marker.visited) Color.Green else categoryColor(marker.category),
                                 point = point,
                                 onClick = {
                                     if (routeState.isCreating) {
@@ -997,12 +996,6 @@ fun TripScreen(
                             }
                         }
                     }
-//                    OutlinedTextField(
-//                        value = editMarkerCategory,
-//                        onValueChange = { editMarkerCategory = it },
-//                        label = { Text("Category") },
-//                        modifier = Modifier.fillMaxWidth()
-//                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = editMarkerNotes,
