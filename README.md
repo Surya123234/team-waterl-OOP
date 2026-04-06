@@ -84,4 +84,4 @@ MAPBOX_ACCESS_TOKEN=your_mapbox_token
 | Advait Sangle | 20994869 |
 | Hetarth Mahida | 21022244 |
 
-- [Team contract](https://docs.google.com/document/d/1fmmSnTnN5tbHDvTeoqfRX5i9_I4y48rrhrLXV7Q2cq0/edit?usp=sharing)
+[Team contract](https://docs.google.com/document/d/1fmmSnTnN5tbHDvTeoqfRX5i9_I4y48rrhrLXV7Q2cq0/edit?usp=sharing)
