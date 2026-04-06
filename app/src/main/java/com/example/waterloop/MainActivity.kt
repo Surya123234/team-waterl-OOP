@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
  * - No dates at all → "planned"
  * - Today is before startDate → "planned"
  * - Today is between startDate and endDate (inclusive) → "active"
- * - Today is after endDate → "finished"
+ * - Today is after endDate → "completed"
  * - Only startDate, no endDate → "active" on/after that date, "planned" before
  */
 fun computeTripStatus(startDate: String?, endDate: String?): String {
@@ -156,7 +156,7 @@ fun computeTripStatus(startDate: String?, endDate: String?): String {
     return when {
         start == null && end == null -> "planned"
         start != null && today.isBefore(start) -> "planned"
-        end != null && today.isAfter(end) -> "finished"
+        end != null && today.isAfter(end) -> "completed"
         else -> "active"  // today >= start and (no end or today <= end)
     }
 }
@@ -295,139 +295,57 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                 }
             }
 
+            // Group trips by auto-computed status
+            val groupedTrips = trips.groupBy { computeTripStatus(it.startDate, it.endDate) }
+            val activeTrips = groupedTrips["active"].orEmpty()
+            val plannedTrips = groupedTrips["planned"].orEmpty()
+            val completedTrips = groupedTrips["completed"].orEmpty()
+
+            val sections = listOf(
+                Triple("Active", Color(0xFF4CAF50), activeTrips),
+                Triple("Planned", WaterloopGold, plannedTrips),
+                Triple("Completed", Color.Gray, completedTrips)
+            )
+
             LazyColumn {
-                items(trips) { trip ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .padding(vertical = 8.dp)
-                            .clickable {
-                                viewModel.setSelectedTrip(trip)
-                                navController.navigate("single_trip/${trip.id}")
-                            },
-                        shape = RoundedCornerShape(12.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                    ) {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            if (!trip.coverImageUrl.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = trip.coverImageUrl,
-                                    contentDescription = trip.title,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                Image(
-                                    painter = painterResource(id = R.drawable.google_stock_location),
-                                    contentDescription = trip.title,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color.Transparent,
-                                                Color.Black.copy(alpha = 0.7f)
-                                            ),
-                                            startY = 100f
-                                        )
-                                    )
-                                    .padding(16.dp),
-                                contentAlignment = Alignment.BottomStart
-                            ) {
-                                Column {
-                                    Text(
-                                        text = trip.title,
-                                        fontSize = 24.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        text = "Trip to ${trip.city}",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White.copy(alpha = 0.9f)
-                                    )
-                                    if (!trip.startDate.isNullOrBlank()) {
-                                        Text(
-                                            text = "${trip.startDate} - ${trip.endDate.orEmpty()}",
-                                            fontSize = 12.sp,
-                                            color = Color.White.copy(alpha = 0.8f)
-                                        )
-                                    }
-                                }
-                            }
-                            
-                            // Status Badge — auto-computed from dates
-                            val liveStatus = computeTripStatus(trip.startDate, trip.endDate)
-                            val statusColor = when (liveStatus) {
-                                "planned" -> WaterloopGold
-                                "active" -> Color(0xFF4CAF50)
-                                "finished" -> Color.Gray
-                                else -> WaterloopBlue
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .padding(8.dp)
-                                    .background(statusColor, RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = liveStatus.uppercase(),
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            // Action Icons (Edit and Delete only)
+                sections.forEach { (label, accentColor, sectionTrips) ->
+                    if (sectionTrips.isNotEmpty()) {
+                        item {
                             Row(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(8.dp)
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
                             ) {
-                                IconButton(
-                                    onClick = {
-                                        tripToEdit = trip
-                                        tripTitle = trip.title
-                                        tripCity = trip.city ?: ""
-                                        tripStartDate = trip.startDate ?: ""
-                                        tripEndDate = trip.endDate ?: ""
-                                        selectedCoverImageUri = null
-                                    },
+                                Box(
                                     modifier = Modifier
-                                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-                                        .size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = "Edit trip",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                        .size(10.dp)
+                                        .background(accentColor, CircleShape)
+                                )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                IconButton(
-                                    onClick = { tripToDelete = trip },
-                                    modifier = Modifier
-                                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-                                        .size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete trip",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                Text(
+                                    text = "$label (${sectionTrips.size})",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
                             }
+                        }
+                        items(sectionTrips) { trip ->
+                            TripCard(
+                                trip = trip,
+                                onTripClick = {
+                                    viewModel.setSelectedTrip(trip)
+                                    navController.navigate("single_trip/${trip.id}")
+                                },
+                                onEditClick = {
+                                    tripToEdit = trip
+                                    tripTitle = trip.title
+                                    tripCity = trip.city ?: ""
+                                    tripStartDate = trip.startDate ?: ""
+                                    tripEndDate = trip.endDate ?: ""
+                                    selectedCoverImageUri = null
+                                },
+                                onDeleteClick = { tripToDelete = trip }
+                            )
                         }
                     }
                 }
@@ -518,7 +436,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                     val previewStatusColor = when (previewStatus) {
                         "planned" -> WaterloopGold
                         "active" -> Color(0xFF4CAF50)
-                        "finished" -> Color.Gray
+                        "completed" -> Color.Gray
                         else -> WaterloopBlue
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -660,7 +578,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                     val editPreviewStatusColor = when (editPreviewStatus) {
                         "planned" -> WaterloopGold
                         "active" -> Color(0xFF4CAF50)
-                        "finished" -> Color.Gray
+                        "completed" -> Color.Gray
                         else -> WaterloopBlue
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -826,6 +744,115 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
             },
             dismissButton = { TextButton(onClick = { tripToDelete = null }) { Text("Cancel") } }
         )
+    }
+}
+
+@Composable
+fun TripCard(
+    trip: Trip,
+    onTripClick: () -> Unit,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .padding(vertical = 8.dp)
+            .clickable { onTripClick() },
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (!trip.coverImageUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = trip.coverImageUrl,
+                    contentDescription = trip.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Image(
+                    painter = painterResource(id = R.drawable.google_stock_location),
+                    contentDescription = trip.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.7f)
+                            ),
+                            startY = 100f
+                        )
+                    )
+                    .padding(16.dp),
+                contentAlignment = Alignment.BottomStart
+            ) {
+                Column {
+                    Text(
+                        text = trip.title,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Trip to ${trip.city}",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+                    if (!trip.startDate.isNullOrBlank()) {
+                        Text(
+                            text = "${trip.startDate} - ${trip.endDate.orEmpty()}",
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+
+            // Action Icons (Edit and Delete)
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+            ) {
+                IconButton(
+                    onClick = onEditClick,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit trip",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = onDeleteClick,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete trip",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
     }
 }
 

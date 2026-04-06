@@ -128,7 +128,7 @@ fun categoryColor(category: String?): Color = when (category?.lowercase()) {
     "transport"     -> Color(0xFFFF6D00) // orange
     "nature"        -> Color(0xFF2E7D32) // green
     "other"         -> Color(0xFF757575) // grey
-    else            -> WaterloopBlue   // default
+    else            -> WaterloopBlue     // default
 }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

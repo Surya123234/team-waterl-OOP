@@ -2,8 +2,10 @@ package com.example.waterloop.ui.trips
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.waterloop.WaterlOOPApplication
 import com.example.waterloop.data.repository.AuthRepository
 import io.github.jan.supabase.exceptions.RestException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -112,11 +114,16 @@ class AuthViewModel : ViewModel() {
     }
 
     // signs out the current user. isLoggedIn flips to false and the ui returns to the login screen.
+    // also clears the local Room database so the next user doesn't see stale data.
     fun signOut() {
         viewModelScope.launch {
             // DEBUGGING: Log.d("AuthViewModel", "signOut attempt")
             try {
                 repository.signOut()
+                // Clear all cached data so the next user starts fresh
+                launch(Dispatchers.IO) {
+                    WaterlOOPApplication.instance.database.clearAllTables()
+                }
                 _isLoggedIn.value = false
                 // DEBUGGING: Log.d("AuthViewModel", "signOut success")
             } catch (e: Exception) {
