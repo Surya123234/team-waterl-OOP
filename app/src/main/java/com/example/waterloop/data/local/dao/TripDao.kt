@@ -10,10 +10,10 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TripDao {
 
-    @Query("SELECT * FROM trips WHERE locallyDeleted = 0")
+    @Query("SELECT * FROM trips WHERE locallyDeleted = 0 ORDER BY CASE status WHEN 'active' THEN 1 WHEN 'planned' THEN 2 WHEN 'finished' THEN 3 ELSE 4 END, updatedAt DESC")
     suspend fun getAllTrips(): List<TripEntity>
 
-    @Query("SELECT * FROM trips WHERE locallyDeleted = 0")
+    @Query("SELECT * FROM trips WHERE locallyDeleted = 0 ORDER BY CASE status WHEN 'active' THEN 1 WHEN 'planned' THEN 2 WHEN 'finished' THEN 3 ELSE 4 END, updatedAt DESC")
     fun getAllTripsFlow(): Flow<List<TripEntity>>
 
     @Query("SELECT * FROM trips WHERE id = :id")
