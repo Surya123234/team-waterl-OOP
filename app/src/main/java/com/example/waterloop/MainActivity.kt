@@ -273,7 +273,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     Image(
-                        painter = painterResource(id = R.drawable.moraine_lake),
+                        painter = painterResource(id = R.drawable.google_trip),
                         contentDescription = "Moraine Lake",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
