@@ -30,7 +30,7 @@ class TripRepository {
 
     // CRUD operations (local-first)
 
-    suspend fun createTrip(title: String, city: String?, startDate: String?, endDate: String?, status: String = "planned"): Trip? {
+    suspend fun createTrip(title: String, city: String?, startDate: String?, endDate: String?, status: String = "planned", triggerSync: Boolean = true): Trip? {
         val userId = authRepository.getCurrentUserId() ?: return null
         val id = UUID.randomUUID().toString()
 
@@ -46,7 +46,7 @@ class TripRepository {
             updatedAt = System.currentTimeMillis()
         )
         db.tripDao().upsert(entity)
-        syncManager.requestSync()
+        if (triggerSync) syncManager.requestSync()
         return entity.toModel()
     }
 

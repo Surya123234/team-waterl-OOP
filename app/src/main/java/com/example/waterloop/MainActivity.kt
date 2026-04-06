@@ -584,10 +584,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                             tripStartDate.ifBlank { null },
                             tripEndDate.ifBlank { null }
                         )
-                        val newTrip = viewModel.createTripAndReturn(tripTitle, tripCity, tripStartDate, tripEndDate, autoStatus)
-                        if (newTrip?.id != null && selectedCoverImageUri != null) {
-                            viewModel.uploadTripCoverImage(newTrip.id, selectedCoverImageUri!!, context.contentResolver)
-                        }
+                        val newTrip = viewModel.createTripAndReturn(tripTitle, tripCity, tripStartDate, tripEndDate, autoStatus, selectedCoverImageUri, context.contentResolver)
                         selectedCoverImageUri = null
                         showCreateDialog = false
                     }
