@@ -144,9 +144,14 @@ class MainActivity : ComponentActivity() {
  * - No dates at all → "planned"
  * - Today is before startDate → "planned"
  * - Today is between startDate and endDate (inclusive) → "active"
- * - Today is after endDate → "completed"
+ * - Today is after endDate → "finished"
  * - Only startDate, no endDate → "active" on/after that date, "planned" before
  */
+fun displayStatus(status: String): String = when (status) {
+    "finished" -> "Completed"
+    else -> status.replaceFirstChar { it.uppercase() }
+}
+
 fun computeTripStatus(startDate: String?, endDate: String?): String {
     val today = LocalDate.now()
 
@@ -156,7 +161,7 @@ fun computeTripStatus(startDate: String?, endDate: String?): String {
     return when {
         start == null && end == null -> "planned"
         start != null && today.isBefore(start) -> "planned"
-        end != null && today.isAfter(end) -> "completed"
+        end != null && today.isAfter(end) -> "finished"
         else -> "active"  // today >= start and (no end or today <= end)
     }
 }
@@ -299,7 +304,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
             val groupedTrips = trips.groupBy { computeTripStatus(it.startDate, it.endDate) }
             val activeTrips = groupedTrips["active"].orEmpty()
             val plannedTrips = groupedTrips["planned"].orEmpty()
-            val completedTrips = groupedTrips["completed"].orEmpty()
+            val completedTrips = groupedTrips["finished"].orEmpty()
 
             val sections = listOf(
                 Triple("Active", Color(0xFF4CAF50), activeTrips),
@@ -436,7 +441,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                     val previewStatusColor = when (previewStatus) {
                         "planned" -> WaterloopGold
                         "active" -> Color(0xFF4CAF50)
-                        "completed" -> Color.Gray
+                        "finished" -> Color.Gray
                         else -> WaterloopBlue
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -446,7 +451,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = previewStatus.replaceFirstChar { it.uppercase() },
+                            text = displayStatus(previewStatus),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = previewStatusColor
@@ -578,7 +583,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                     val editPreviewStatusColor = when (editPreviewStatus) {
                         "planned" -> WaterloopGold
                         "active" -> Color(0xFF4CAF50)
-                        "completed" -> Color.Gray
+                        "finished" -> Color.Gray
                         else -> WaterloopBlue
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -588,7 +593,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = editPreviewStatus.replaceFirstChar { it.uppercase() },
+                            text = displayStatus(editPreviewStatus),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = editPreviewStatusColor

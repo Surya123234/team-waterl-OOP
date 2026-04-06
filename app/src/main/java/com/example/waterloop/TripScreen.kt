@@ -8,6 +8,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,7 +41,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Route
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.text.style.TextAlign
@@ -100,8 +100,11 @@ import com.example.waterloop.ui.trips.RouteState
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.extension.compose.MapEffect
 import com.mapbox.maps.extension.compose.MapboxMap
-import com.mapbox.maps.extension.compose.annotation.Marker
+import com.mapbox.maps.extension.compose.annotation.generated.PointAnnotationGroup
+import com.mapbox.maps.extension.compose.annotation.generated.PointAnnotationGroupState
 import com.mapbox.maps.extension.compose.annotation.generated.PolylineAnnotation
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
+import androidx.compose.ui.graphics.toArgb
 import com.mapbox.geojson.Point
 import com.mapbox.maps.extension.compose.animation.viewport.rememberMapViewportState
 import com.mapbox.maps.extension.compose.annotation.ViewAnnotation
@@ -390,37 +393,63 @@ fun TripScreen(
                                         }
                                     }
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = null,
-                                        tint = WaterloopBlue,
+                                    Canvas(
                                         modifier = Modifier
-                                            .size(50.dp)
-                                            .rotate(bearing.toFloat() - 90f)
-                                    )
+                                            .size(18.dp)
+                                            .rotate(bearing.toFloat())
+                                    ) {
+                                        val path = androidx.compose.ui.graphics.Path().apply {
+                                            // Arrow pointing up (north / 0°)
+                                            moveTo(size.width / 2f, 0f)
+                                            lineTo(size.width, size.height)
+                                            lineTo(size.width / 2f, size.height * 0.65f)
+                                            lineTo(0f, size.height)
+                                            close()
+                                        }
+                                        drawPath(path, color = WaterloopBlue)
+                                    }
                                 }
                             }
                         }
 
-                        markers.forEach { marker ->
-                            val point = Point.fromLngLat(marker.longitude, marker.latitude)
-                            Marker(
-                                color = if (marker.visited) Color.Green else categoryColor(marker.category),
-                                point = point,
-                                onClick = {
+                        // Build annotation options for each marker
+                        val annotationOptions = remember(markers) {
+                            markers.map { marker ->
+                                val color = if (marker.visited) Color.Green else categoryColor(marker.category)
+                                PointAnnotationOptions()
+                                    .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                                    .withIconImage(createMarkerBitmap(color))
+                                    .withIconSize(1.0)
+                                    .withIconAnchor(com.mapbox.maps.extension.style.layers.properties.generated.IconAnchor.BOTTOM)
+                                    .withData(com.google.gson.JsonPrimitive(marker.id))
+                            }
+                        }
+                        val pointAnnotationGroupState = remember {
+                            PointAnnotationGroupState().apply {
+                                iconAllowOverlap = true
+                                iconIgnorePlacement = true
+                            }
+                        }
+                        PointAnnotationGroup(
+                            annotations = annotationOptions,
+                            pointAnnotationGroupState = pointAnnotationGroupState.also {
+                                it.interactionsState.onClicked { annotation ->
+                                    val markerId = annotation.getData()?.asString ?: return@onClicked false
+                                    val point = annotation.point
                                     if (routeState.isCreating) {
                                         routeState = routeState.copy(points = routeState.points + point)
+                                        val title = markers.find { it.id == markerId }?.title ?: ""
                                         scope.launch {
-                                            snackbarHostState.showSnackbar("Added ${marker.title} to route")
+                                            snackbarHostState.showSnackbar("Added $title to route")
                                         }
                                     } else {
-                                        selectedMarkerId = marker.id
+                                        selectedMarkerId = markerId
                                         showMarkerSheet = true
                                     }
                                     true
                                 }
-                            )
-                        }
+                            }
+                        )
                         MapEffect(Unit) { mapView ->
                             mapView.location.updateSettings {
                                 locationPuck = createDefault2DPuck(withBearing = true)
@@ -1310,4 +1339,39 @@ private fun calculateMidpoint(start: Point, end: Point): Point {
         (start.longitude() + end.longitude()) / 2.0,
         (start.latitude() + end.latitude()) / 2.0
     )
+}
+
+/**
+ * Creates a map pin bitmap in the given color.
+ * Draws a teardrop/pin shape with a white inner circle.
+ */
+private val markerBitmapCache = mutableMapOf<Int, android.graphics.Bitmap>()
+
+private fun createMarkerBitmap(color: Color): android.graphics.Bitmap {
+    val argb = color.toArgb()
+    markerBitmapCache[argb]?.let { return it }
+
+    val width = 64
+    val height = 84
+    val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+    // Draw pin body: triangle first, then circle on top
+    paint.color = argb
+    val triangle = android.graphics.Path().apply {
+        moveTo(width * 0.15f, width * 0.5f)
+        lineTo(width / 2f, height.toFloat())
+        lineTo(width * 0.85f, width * 0.5f)
+        close()
+    }
+    canvas.drawPath(triangle, paint)
+    canvas.drawCircle(width / 2f, width / 2f, width / 2f, paint)
+
+    // White inner circle
+    paint.color = android.graphics.Color.WHITE
+    canvas.drawCircle(width / 2f, width / 2f, width * 0.25f, paint)
+
+    markerBitmapCache[argb] = bitmap
+    return bitmap
 }
