@@ -9,11 +9,11 @@ RoutePal is an Android app that helps you plan, experience, and remember trips t
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/trips-home.png" width="22%" alt="Trip list"/>
-  <img src="docs/screenshots/routes.png" width="22%" alt="Route planning"/>
-  <img src="docs/screenshots/marker-photos.png" width="22%" alt="Marker with photos"/>
-  <img src="docs/screenshots/edit-marker.png" width="22%" alt="Edit marker"/>
-  <img src="docs/screenshots/sharing.png" width="22%" alt="Trip sharing"/>
+  <img src="docs/screenshots/trips-home.png" width="33%" alt="Trip list"/>
+  <img src="docs/screenshots/routes.png" width="33%" alt="Route planning"/>
+  <img src="docs/screenshots/marker-photos.png" width="33%" alt="Marker with photos"/>
+  <img src="docs/screenshots/edit-marker.png" width="33%" alt="Edit marker"/>
+  <img src="docs/screenshots/sharing.png" width="33%" alt="Trip sharing"/>
 </p>
 
 ---
