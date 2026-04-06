@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonPrimitive
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Manages Supabase Realtime WebSocket subscriptions for a single trip at a time.
@@ -45,6 +46,7 @@ import kotlinx.serialization.json.jsonPrimitive
 class RealtimeManager(private val db: AppDatabase) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val channelSeq = AtomicInteger(0)
     private var activeChannel: RealtimeChannel? = null
     private var currentTripId: String? = null
     private var userChannel: RealtimeChannel? = null
@@ -62,7 +64,7 @@ class RealtimeManager(private val db: AppDatabase) {
         if (tripId == currentTripId && activeChannel != null) return  // already subscribed
         unsubscribeFromTrip()
 
-        val channel = SupabaseClient.client.channel("trip_$tripId")
+        val channel = SupabaseClient.client.channel("trip_${tripId}_${channelSeq.getAndIncrement()}")
         activeChannel = channel
         this.currentTripId = tripId
 
@@ -154,7 +156,7 @@ class RealtimeManager(private val db: AppDatabase) {
         if (userId == currentUserId && userChannel != null) return  // already subscribed
         unsubscribeFromUserTrips()
 
-        val channel = SupabaseClient.client.channel("user_trips_$userId")
+        val channel = SupabaseClient.client.channel("user_trips_${userId}_${channelSeq.getAndIncrement()}")
         userChannel = channel
         currentUserId = userId
 

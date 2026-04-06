@@ -54,6 +54,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -187,8 +189,14 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
     var tripEndDate by remember { mutableStateOf("") }
 
 
-    // Cover image state for dialogs
-    var selectedCoverImageUri by remember { mutableStateOf<Uri?>(null) }
+    // Cover image state for dialogs — rememberSaveable so the URI survives activity recreation
+    // (e.g. when the image picker causes a PAUSED → STOPPED → RESUMED cycle)
+    var selectedCoverImageUri by rememberSaveable(
+        stateSaver = Saver(
+            save = { it?.toString() },
+            restore = { it?.let { Uri.parse(it) } }
+        )
+    ) { mutableStateOf<Uri?>(null) }
 
     // Date Picker state
     var showStartDatePicker by remember { mutableStateOf(false) }
