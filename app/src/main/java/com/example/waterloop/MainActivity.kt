@@ -83,14 +83,11 @@ import com.example.waterloop.ui.trips.AuthViewModel
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.text.font.FontFamily
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.foundation.layout.PaddingValues
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -142,6 +139,28 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Derives trip status automatically from start/end dates compared to today.
+ * - No dates at all → "planned"
+ * - Today is before startDate → "planned"
+ * - Today is between startDate and endDate (inclusive) → "active"
+ * - Today is after endDate → "finished"
+ * - Only startDate, no endDate → "active" on/after that date, "planned" before
+ */
+fun computeTripStatus(startDate: String?, endDate: String?): String {
+    val today = LocalDate.now()
+
+    val start = runCatching { LocalDate.parse(startDate) }.getOrNull()
+    val end = runCatching { LocalDate.parse(endDate) }.getOrNull()
+
+    return when {
+        start == null && end == null -> "planned"
+        start != null && today.isBefore(start) -> "planned"
+        end != null && today.isAfter(end) -> "finished"
+        else -> "active"  // today >= start and (no end or today <= end)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
@@ -166,7 +185,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
     var tripCity by remember { mutableStateOf("") }
     var tripStartDate by remember { mutableStateOf("") }
     var tripEndDate by remember { mutableStateOf("") }
-    var tripStatus by remember { mutableStateOf("planned") }
+
 
     // Cover image state for dialogs
     var selectedCoverImageUri by remember { mutableStateOf<Uri?>(null) }
@@ -246,7 +265,6 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                     .height(200.dp)
                     .clickable {
                         tripTitle = ""; tripCity = ""; tripStartDate = ""; tripEndDate = ""
-                        tripStatus = "planned"
                         selectedCoverImageUri = null
                         showCreateDialog = true
                     },
@@ -346,8 +364,9 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                                 }
                             }
                             
-                            // Status Badge
-                            val statusColor = when (trip.status.lowercase()) {
+                            // Status Badge — auto-computed from dates
+                            val liveStatus = computeTripStatus(trip.startDate, trip.endDate)
+                            val statusColor = when (liveStatus) {
                                 "planned" -> WaterloopGold
                                 "active" -> Color(0xFF4CAF50)
                                 "finished" -> Color.Gray
@@ -361,7 +380,7 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = trip.status.uppercase(),
+                                    text = liveStatus.uppercase(),
                                     color = Color.White,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
@@ -381,7 +400,6 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                                         tripCity = trip.city ?: ""
                                         tripStartDate = trip.startDate ?: ""
                                         tripEndDate = trip.endDate ?: ""
-                                        tripStatus = trip.status
                                         selectedCoverImageUri = null
                                     },
                                     modifier = Modifier
@@ -491,36 +509,30 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                         )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Text(
-                        text = "Status",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+
+                    // Auto-computed status preview
+                    val previewStatus = computeTripStatus(
+                        tripStartDate.ifBlank { null },
+                        tripEndDate.ifBlank { null }
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        listOf("planned", "active", "finished").forEach { status ->
-                            val isSelected = tripStatus == status
-                            val color = when (status) {
-                                "planned" -> WaterloopGold
-                                "active" -> Color(0xFF4CAF50)
-                                "finished" -> Color.Gray
-                                else -> WaterloopBlue
-                            }
-                            OutlinedButton(
-                                onClick = { tripStatus = status },
-                                colors = if (isSelected) ButtonDefaults.outlinedButtonColors(containerColor = color.copy(alpha = 0.2f), contentColor = color) 
-                                         else ButtonDefaults.outlinedButtonColors(),
-                                border = BorderStroke(1.dp, if (isSelected) color else Color.Gray),
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 4.dp)
-                            ) {
-                                Text(status.replaceFirstChar { it.uppercase() }, fontSize = 11.sp, maxLines = 1)
-                            }
-                        }
+                    val previewStatusColor = when (previewStatus) {
+                        "planned" -> WaterloopGold
+                        "active" -> Color(0xFF4CAF50)
+                        "finished" -> Color.Gray
+                        else -> WaterloopBlue
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Status: ",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = previewStatus.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = previewStatusColor
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -568,7 +580,11 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
             confirmButton = {
                 Button(onClick = {
                     coroutineScope.launch {
-                        val newTrip = viewModel.createTripAndReturn(tripTitle, tripCity, tripStartDate, tripEndDate, tripStatus)
+                        val autoStatus = computeTripStatus(
+                            tripStartDate.ifBlank { null },
+                            tripEndDate.ifBlank { null }
+                        )
+                        val newTrip = viewModel.createTripAndReturn(tripTitle, tripCity, tripStartDate, tripEndDate, autoStatus)
                         if (newTrip?.id != null && selectedCoverImageUri != null) {
                             viewModel.uploadTripCoverImage(newTrip.id, selectedCoverImageUri!!, context.contentResolver)
                         }
@@ -639,35 +655,29 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                     }
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Text(
-                        text = "Status",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // Auto-computed status preview
+                    val editPreviewStatus = computeTripStatus(
+                        tripStartDate.ifBlank { null },
+                        tripEndDate.ifBlank { null }
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        listOf("planned", "active", "finished").forEach { status ->
-                            val isSelected = tripStatus == status
-                            val color = when (status) {
-                                "planned" -> WaterloopGold
-                                "active" -> Color(0xFF4CAF50)
-                                "finished" -> Color.Gray
-                                else -> WaterloopBlue
-                            }
-                            OutlinedButton(
-                                onClick = { tripStatus = status },
-                                colors = if (isSelected) ButtonDefaults.outlinedButtonColors(containerColor = color.copy(alpha = 0.2f), contentColor = color) 
-                                         else ButtonDefaults.outlinedButtonColors(),
-                                border = BorderStroke(1.dp, if (isSelected) color else Color.Gray),
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 4.dp)
-                            ) {
-                                Text(status.replaceFirstChar { it.uppercase() }, fontSize = 11.sp, maxLines = 1)
-                            }
-                        }
+                    val editPreviewStatusColor = when (editPreviewStatus) {
+                        "planned" -> WaterloopGold
+                        "active" -> Color(0xFF4CAF50)
+                        "finished" -> Color.Gray
+                        else -> WaterloopBlue
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Status: ",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = editPreviewStatus.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = editPreviewStatusColor
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -740,12 +750,16 @@ fun MainScreen(navController: NavController, authViewModel: AuthViewModel) {
                         if (selectedCoverImageUri != null && trip.id != null) {
                             viewModel.uploadTripCoverImage(trip.id, selectedCoverImageUri!!, context.contentResolver)
                         }
+                        val autoStatus = computeTripStatus(
+                            tripStartDate.ifBlank { null },
+                            tripEndDate.ifBlank { null }
+                        )
                         viewModel.updateTrip(trip.copy(
                             title = tripTitle,
                             city = tripCity,
                             startDate = tripStartDate,
                             endDate = tripEndDate,
-                            status = tripStatus
+                            status = autoStatus
                         ))
                         selectedCoverImageUri = null
                         tripToEdit = null

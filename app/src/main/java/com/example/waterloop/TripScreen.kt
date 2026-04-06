@@ -126,7 +126,7 @@ fun categoryColor(category: String?): Color = when (category?.lowercase()) {
     "sightseeing"   -> Color(0xFF1E88E5) // blue
     "accommodation" -> Color(0xFFFFEB3B) // yellow
     "transport"     -> Color(0xFFFF6D00) // orange
-    "nature"     -> Color(0xFF2E7D32) // green
+    "nature"        -> Color(0xFF2E7D32) // green
     "other"         -> Color(0xFF757575) // grey
     else            -> WaterloopBlue   // default
 }
@@ -649,6 +649,16 @@ fun TripScreen(
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Category") },
+                            leadingIcon = if (markerCategory.isNotEmpty()) {
+                                {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .clip(CircleShape)
+                                            .background(categoryColor(markerCategory))
+                                    )
+                                }
+                            } else null,
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
                             modifier = Modifier.fillMaxWidth().menuAnchor()
                         )
@@ -658,7 +668,18 @@ fun TripScreen(
                         ) {
                             markerCategories.forEach { cat ->
                                 DropdownMenuItem(
-                                    text = { Text(cat) },
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(12.dp)
+                                                    .clip(CircleShape)
+                                                    .background(categoryColor(cat))
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(cat)
+                                        }
+                                    },
                                     onClick = { markerCategory = cat; categoryExpanded = false }
                                 )
                             }
@@ -981,6 +1002,16 @@ fun TripScreen(
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Category") },
+                            leadingIcon = if (editMarkerCategory.isNotEmpty()) {
+                                {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .clip(CircleShape)
+                                            .background(categoryColor(editMarkerCategory))
+                                    )
+                                }
+                            } else null,
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = editCategoryExpanded) },
                             modifier = Modifier.fillMaxWidth().menuAnchor()
                         )
@@ -990,7 +1021,18 @@ fun TripScreen(
                         ) {
                             markerCategories.forEach { cat ->
                                 DropdownMenuItem(
-                                    text = { Text(cat) },
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(12.dp)
+                                                    .clip(CircleShape)
+                                                    .background(categoryColor(cat))
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(cat)
+                                        }
+                                    },
                                     onClick = { editMarkerCategory = cat; editCategoryExpanded = false }
                                 )
                             }
