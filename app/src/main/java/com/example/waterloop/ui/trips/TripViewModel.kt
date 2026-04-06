@@ -77,9 +77,25 @@ class TripViewModel : ViewModel() {
         }
     }
 
-    suspend fun createTripAndReturn(title: String, city: String?, startDate: String?, endDate: String?, status: String = "planned"): Trip? {
-        val newTrip = repository.createTrip(title, city, startDate, endDate, status)
+    suspend fun createTripAndReturn(
+        title: String,
+        city: String?,
+        startDate: String?,
+        endDate: String?,
+        status: String = "planned",
+        coverImageUri: Uri? = null,
+        contentResolver: ContentResolver? = null
+    ): Trip? {
+        // Defer sync until after the image (if any) is written, to avoid a race where
+        // the background sync pushes the trip before localCoverImagePath is set and then
+        // overwrites it with synced=true/localCoverImagePath=null.
+        val newTrip = repository.createTrip(title, city, startDate, endDate, status, triggerSync = false)
         _tripCreationMessage.value = if (newTrip != null) "Trip created successfully" else "Failed to create trip"
+        if (newTrip?.id != null && coverImageUri != null && contentResolver != null) {
+            uploadTripCoverImage(newTrip.id, coverImageUri, contentResolver) // triggers sync internally
+        } else {
+            syncManager.requestSync()
+        }
         return newTrip
     }
 
