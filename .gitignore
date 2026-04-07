@@ -41,3 +41,6 @@ google-services.json
 
 # Claude
 .claude/
+
+# DS_Store
+.DS_Store
